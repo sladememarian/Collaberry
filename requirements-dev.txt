@@ -1,0 +1,25 @@
+# Everything the test suites (unit / integration / e2e / stress) need locally.
+# Install once with: pip install -r requirements-dev.txt
+
+# The service runtime deps (so imports resolve when running tests on the host)
+fastapi==0.115.5
+uvicorn[standard]==0.32.1
+email-validator==2.2.0
+motor==3.6.0
+pymongo==4.9.2
+redis==5.2.1
+pydantic==2.9.2
+pydantic-settings==2.6.1
+PyJWT==2.9.0
+cryptography==43.0.3
+bcrypt==4.2.0
+orjson==3.10.11
+
+# Test tooling
+pytest==8.3.4
+pytest-asyncio==0.24.0
+httpx==0.28.1
+websockets==13.1
+mongomock-motor==0.0.34
+fakeredis==2.26.1
+locust==2.32.4

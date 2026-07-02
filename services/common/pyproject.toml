@@ -1,0 +1,23 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "collaberry-common"
+version = "0.1.0"
+description = "Shared building blocks for the Collaberry backend services"
+requires-python = ">=3.11"
+dependencies = [
+    "motor==3.6.0",
+    "pymongo==4.9.2",
+    "redis==5.2.1",
+    "pydantic==2.9.2",
+    "pydantic-settings==2.6.1",
+    "PyJWT==2.9.0",
+    "cryptography==43.0.3",
+    "bcrypt==4.2.0",
+    "orjson==3.10.11",
+]
+
+[tool.setuptools.packages.find]
+include = ["collaberry_common*"]

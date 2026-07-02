@@ -1,0 +1,197 @@
+"""Mongo persistence for workspaces, boards and the polymorphic items.
+
+Access control lives here as well: every read/write is scoped to a user who must
+be a member of the owning workspace. Route handlers pass the caller's id in and
+trust this layer to refuse anything they shouldn't see.
+"""
+
+from __future__ import annotations
+
+import uuid
+
+from bson import ObjectId
+from bson.errors import InvalidId
+
+from collaberry_common.db import Mongo, oid_to_str
+from collaberry_common.models import (
+    BoardCreate,
+    Column,
+    ItemCreate,
+    ItemUpdate,
+    WorkspaceContext,
+    utcnow,
+)
+
+
+class NotFound(Exception):
+    """Raised when a document is absent *or* the caller may not see it."""
+
+
+def _oid(value: str) -> ObjectId:
+    try:
+        return ObjectId(value)
+    except (InvalidId, TypeError):
+        raise NotFound(value)
+
+
+class WorkspaceRepository:
+    def __init__(self, mongo: Mongo) -> None:
+        self._ws = mongo.db["workspaces"]
+        self._boards = mongo.db["boards"]
+        self._items = mongo.db["items"]
+
+    async def ensure_indexes(self) -> None:
+        await self._ws.create_index("members.user_id")
+        await self._boards.create_index("workspace_id")
+        # The hot query is "give me a board's items, in order".
+        await self._items.create_index([("board_id", 1), ("column_id", 1), ("order", 1)])
+
+    # ---- workspaces ------------------------------------------------------
+    async def create_workspace(self, *, owner_id: str, name: str, context: WorkspaceContext) -> dict:
+        doc = {
+            "name": name,
+            "context": context.value if isinstance(context, WorkspaceContext) else context,
+            "owner_id": owner_id,
+            "members": [{"user_id": owner_id, "role": "owner"}],
+            "created_at": utcnow(),
+        }
+        res = await self._ws.insert_one(doc)
+        doc["_id"] = res.inserted_id
+        return oid_to_str(doc)  # type: ignore[return-value]
+
+    async def list_workspaces(self, user_id: str) -> list[dict]:
+        cur = self._ws.find({"members.user_id": user_id}).sort("created_at", 1)
+        rows = [oid_to_str(d) for d in await cur.to_list(length=500)]  # type: ignore[misc]
+        # First visit: hand the user a "Personal" workspace so the app is never an
+        # empty void on first launch (per the spec). Lazily provisioned here rather
+        # than at register time, which keeps auth-service decoupled from Mongo's
+        # workspace collection — the one owner of this data stays the one writer.
+        if not rows:
+            personal = await self.create_workspace(
+                owner_id=user_id, name="Personal", context=WorkspaceContext.personal
+            )
+            rows = [personal]
+        return rows
+
+    async def get_workspace_for_member(self, workspace_id: str, user_id: str) -> dict:
+        doc = await self._ws.find_one({"_id": _oid(workspace_id), "members.user_id": user_id})
+        if not doc:
+            raise NotFound(workspace_id)
+        return oid_to_str(doc)  # type: ignore[return-value]
+
+    async def _assert_member(self, workspace_id: str, user_id: str) -> None:
+        await self.get_workspace_for_member(workspace_id, user_id)
+
+    async def add_member(self, workspace_id: str, owner_id: str, new_user_id: str, role: str) -> dict:
+        ws = await self.get_workspace_for_member(workspace_id, owner_id)
+        if ws["owner_id"] != owner_id:
+            raise NotFound(workspace_id)  # only the owner invites; hide otherwise
+        if any(m["user_id"] == new_user_id for m in ws["members"]):
+            return ws
+        await self._ws.update_one(
+            {"_id": _oid(workspace_id)},
+            {"$push": {"members": {"user_id": new_user_id, "role": role}}},
+        )
+        return await self.get_workspace_for_member(workspace_id, owner_id)
+
+    # ---- boards ----------------------------------------------------------
+    async def create_board(self, *, workspace_id: str, user_id: str, body: BoardCreate) -> dict:
+        await self._assert_member(workspace_id, user_id)
+        columns = [
+            Column(id=uuid.uuid4().hex[:8], name=name, order=i).model_dump()
+            for i, name in enumerate(body.columns)
+        ]
+        doc = {
+            "workspace_id": workspace_id,
+            "name": body.name,
+            "columns": columns,
+            "created_at": utcnow(),
+        }
+        res = await self._boards.insert_one(doc)
+        doc["_id"] = res.inserted_id
+        return oid_to_str(doc)  # type: ignore[return-value]
+
+    async def list_boards(self, workspace_id: str, user_id: str) -> list[dict]:
+        await self._assert_member(workspace_id, user_id)
+        cur = self._boards.find({"workspace_id": workspace_id}).sort("created_at", 1)
+        return [oid_to_str(d) for d in await cur.to_list(length=500)]  # type: ignore[misc]
+
+    async def get_board(self, board_id: str, user_id: str) -> dict:
+        board = await self._boards.find_one({"_id": _oid(board_id)})
+        if not board:
+            raise NotFound(board_id)
+        await self._assert_member(board["workspace_id"], user_id)
+        return oid_to_str(board)  # type: ignore[return-value]
+
+    # ---- items -----------------------------------------------------------
+    async def _next_order(self, board_id: str, column_id: str) -> float:
+        last = await self._items.find_one(
+            {"board_id": board_id, "column_id": column_id}, sort=[("order", -1)]
+        )
+        return (last["order"] + 1.0) if last else 1.0
+
+    async def create_item(self, *, board_id: str, user_id: str, body: ItemCreate) -> dict:
+        board = await self.get_board(board_id, user_id)
+        if not any(c["id"] == body.column_id for c in board["columns"]):
+            raise NotFound(f"column {body.column_id}")
+        doc = {
+            "board_id": board_id,
+            "workspace_id": board["workspace_id"],
+            "column_id": body.column_id,
+            "type": body.type if isinstance(body.type, str) else body.type.value,
+            "title": body.title,
+            "order": await self._next_order(board_id, body.column_id),
+            "data": body.data,
+            "assignees": body.assignees,
+            "tags": body.tags,
+            "due_date": body.due_date,
+            "created_by": user_id,
+            "updated_at": utcnow(),
+        }
+        res = await self._items.insert_one(doc)
+        doc["_id"] = res.inserted_id
+        return oid_to_str(doc)  # type: ignore[return-value]
+
+    async def list_items(self, board_id: str, user_id: str) -> list[dict]:
+        await self.get_board(board_id, user_id)
+        cur = self._items.find({"board_id": board_id}).sort([("column_id", 1), ("order", 1)])
+        return [oid_to_str(d) for d in await cur.to_list(length=2000)]  # type: ignore[misc]
+
+    async def get_item(self, item_id: str, user_id: str) -> dict:
+        item = await self._items.find_one({"_id": _oid(item_id)})
+        if not item:
+            raise NotFound(item_id)
+        await self._assert_member(item["workspace_id"], user_id)
+        return oid_to_str(item)  # type: ignore[return-value]
+
+    async def update_item(self, item_id: str, user_id: str, patch: ItemUpdate) -> dict:
+        item = await self.get_item(item_id, user_id)
+        changes: dict = {"updated_at": utcnow()}
+        moved = False
+
+        if patch.title is not None:
+            changes["title"] = patch.title
+        if patch.data is not None:
+            changes["data"] = patch.data
+        if patch.assignees is not None:
+            changes["assignees"] = patch.assignees
+        if patch.tags is not None:
+            changes["tags"] = patch.tags
+        if patch.due_date is not None:
+            changes["due_date"] = patch.due_date
+        if patch.column_id is not None and patch.column_id != item["column_id"]:
+            changes["column_id"] = patch.column_id
+            moved = True
+        if patch.order is not None:
+            changes["order"] = patch.order
+        elif moved:
+            # Moved columns without an explicit slot → drop it at the bottom.
+            changes["order"] = await self._next_order(item["board_id"], patch.column_id)
+
+        await self._items.update_one({"_id": _oid(item_id)}, {"$set": changes})
+        return await self.get_item(item_id, user_id)
+
+    async def delete_item(self, item_id: str, user_id: str) -> dict:
+        item = await self.get_item(item_id, user_id)
+        await self._items.delete_one({"_id": _oid(item_id)})
+        return item
