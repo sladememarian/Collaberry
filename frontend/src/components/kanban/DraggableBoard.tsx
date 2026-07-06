@@ -22,7 +22,7 @@ import Animated, {
   withTiming,
 } from "react-native-reanimated";
 import React, { useCallback, useMemo, useRef, useState } from "react";
-import { Pressable, ScrollView, Text, useWindowDimensions, View, type NativeSyntheticEvent, type NativeScrollEvent } from "react-native";
+import { Pressable, ScrollView, Text, useWindowDimensions, View, type LayoutChangeEvent, type NativeSyntheticEvent, type NativeScrollEvent } from "react-native";
 
 import { ChevronRightIcon, DotGridIcon, PlusIcon } from "@/components/icons";
 import { glow, palette, type WorkspaceContext } from "@/theme/tokens";
@@ -59,7 +59,16 @@ export function DraggableBoard({
   onMoveCard,
   onReorderColumns,
 }: DraggableBoardProps) {
-  const { width: screenW } = useWindowDimensions();
+  const { width: screenW, height: screenH } = useWindowDimensions();
+
+  // The board's own rendered height (the horizontal ScrollView's viewport).
+  // Every lane is sized to exactly this so the vertical card list inside each
+  // lane gets a *bounded* height and can therefore establish its own internal
+  // scroll region — the crux of the mouse-wheel scroll fix. Seeded from the
+  // window height so the very first frame isn't collapsed, then corrected on
+  // layout.
+  const [viewportH, setViewportH] = useState(0);
+  const laneHeight = viewportH || Math.max(screenH - 140, 320);
 
   const columns = useMemo(
     () => [...board.columns].sort((a, b) => a.order - b.order),
@@ -121,6 +130,15 @@ export function DraggableBoard({
     });
   }, []);
 
+  const onBoardLayout = useCallback(
+    (e: LayoutChangeEvent) => {
+      measureOrigin();
+      const h = e.nativeEvent.layout.height;
+      if (h) setViewportH(h);
+    },
+    [measureOrigin],
+  );
+
   const onScroll = useCallback((e: NativeSyntheticEvent<NativeScrollEvent>) => {
     scrollOffsetX.current = e.nativeEvent.contentOffset.x;
   }, []);
@@ -172,8 +190,8 @@ export function DraggableBoard({
       showsHorizontalScrollIndicator={false}
       onScroll={onScroll}
       scrollEventThrottle={16}
-      onLayout={measureOrigin}
-      contentContainerStyle={{ paddingHorizontal: GUTTER, paddingBottom: GUTTER }}
+      onLayout={onBoardLayout}
+      contentContainerStyle={{ paddingHorizontal: GUTTER, paddingTop: 4 }}
       className="flex-1"
     >
       {columns.map((col, index) => (
@@ -186,6 +204,7 @@ export function DraggableBoard({
           nextColumnId={columns[index + 1]?.id ?? null}
           items={byColumn[col.id] ?? []}
           width={columnWidth}
+          height={laneHeight}
           workspaceContext={workspaceContext}
           locks={locks}
           isDropTarget={hoverColumn === col.id && draggingLane !== col.id}
@@ -206,8 +225,8 @@ export function DraggableBoard({
           matches the column rhythm instead of a stray floating button. */}
       <Pressable
         onPress={onAddColumn}
-        style={{ width: Math.min(160, columnWidth * 0.7) }}
-        className="mr-3.5 mt-9 h-32 items-center justify-center gap-2 rounded-xl border border-dashed border-ink-hair bg-ink-base/20"
+        style={{ width: Math.min(160, columnWidth * 0.7), height: laneHeight }}
+        className="mr-3.5 items-center justify-center gap-2 rounded-xl border border-dashed border-ink-hair bg-ink-base/20"
         accessibilityLabel="Add a lane"
       >
         <View className="h-9 w-9 items-center justify-center rounded-full bg-ink-raised">
@@ -230,6 +249,8 @@ interface ColumnProps {
   nextColumnId: string | null;
   items: Item[];
   width: number;
+  /** Explicit lane height (= the board viewport) so the inner list can scroll. */
+  height: number;
   workspaceContext: WorkspaceContext;
   locks: ColumnLocks;
   isDropTarget: boolean;
@@ -253,6 +274,7 @@ function DraggableColumn({
   nextColumnId,
   items,
   width,
+  height,
   workspaceContext,
   locks,
   isDropTarget,
@@ -323,7 +345,7 @@ function DraggableColumn({
 
   return (
     <Animated.View
-      style={[{ width, height: "100%" }, laneDragStyle]}
+      style={[{ width, height }, laneDragStyle]}
       className="mr-3.5"
       onLayout={(e) => {
         // Record this lane's content-space x-range (stable regardless of
@@ -333,85 +355,98 @@ function DraggableColumn({
         onLaneFrame(column.id, e.nativeEvent.layout.x, e.nativeEvent.layout.width);
       }}
     >
-      <View className="mb-3 flex-row items-center justify-between px-1">
-        <View className="flex-1 flex-row items-center gap-2">
-          {/* Drag handle — press-and-hold, then move by mouse or finger to
-              reorder this lane among the others. */}
-          <GestureDetector gesture={lanePan}>
-            <Pressable hitSlop={6} className="mr-0.5 rounded-md p-1" accessibilityLabel={`Drag to reorder ${column.name}`}>
-              <DotGridIcon size={16} color={palette.textFaint} />
-            </Pressable>
-          </GestureDetector>
-          <Text className="text-h3 font-semibold text-text-hi" numberOfLines={1}>
-            {column.name}
-          </Text>
-          <View className="rounded-pill bg-ink-raised px-2 py-0.5">
-            <Text className="text-meta text-text-low">{items.length}</Text>
-          </View>
-        </View>
-        {/* Explicit lane reorder — always works, no matter the input. */}
-        <View className="flex-row items-center gap-0.5">
-          <LaneNudge disabled={index === 0} rotate onPress={() => onMoveLane(column.id, -1)} />
-          <LaneNudge disabled={index === count - 1} onPress={() => onMoveLane(column.id, 1)} />
-          <Pressable
-            onPress={() => onAddCard(column)}
-            hitSlop={8}
-            className="ml-1 h-7 w-7 items-center justify-center rounded-full bg-ink-raised"
-            accessibilityLabel={`Add card to ${column.name}`}
-          >
-            <PlusIcon size={16} color={palette.textMid} />
-          </Pressable>
-        </View>
-      </View>
-
-      {/* The lane's "track" — a distinct, always-visible surface (Gestalt
-          enclosure) so a column reads as a container even when it holds zero
-          or one card, not just empty black space under the header. */}
+      {/* The whole lane is ONE enclosed track (Gestalt enclosure): a settled,
+          slightly-raised surface with a rounded 1px border that visually binds
+          the header and the card list into a single cohesive column, so a lane
+          always reads as a distinct container/drop-zone — even empty ones —
+          instead of cards floating on the black canvas. `height` is explicit
+          (the board viewport) which is what finally lets the inner card list
+          own a bounded height and scroll on its own. */}
       <Animated.View
-        style={[{ minHeight: 0 }, targetStyle, isDropTarget ? glow(palette.purple, 16) : null]}
-        className="flex-1 rounded-xl border border-ink-border/70 bg-ink-raised/40 p-2"
+        style={[
+          { minHeight: 0, backgroundColor: "rgba(18,18,22,0.72)" },
+          targetStyle,
+          isDropTarget ? glow(palette.purple, 16) : null,
+        ]}
+        className="flex-1 overflow-hidden rounded-xl border"
       >
-        {isDragging ? (
-          <View className="m-1 flex-1 items-center justify-center rounded-md border border-dashed border-ink-hair py-8">
-            <Text className="text-sub text-text-faint">Drop to place this lane</Text>
-          </View>
-        ) : items.length === 0 ? (
-          <Pressable
-            onPress={() => onAddCard(column)}
-            className="m-1 flex-1 items-center justify-center rounded-md border border-dashed border-ink-hair py-8"
-          >
-            <Text className="text-sub text-text-faint">
-              {isDropTarget ? "Release to drop here" : "Drop a card here"}
+        {/* Header, anchored to the top of the track (own tint + hairline
+            divider) so it reads as the column's cap, not a floating label. */}
+        <View className="flex-row items-center justify-between border-b border-ink-border/70 bg-ink-raised/50 px-2.5 py-2.5">
+          <View className="flex-1 flex-row items-center gap-2">
+            {/* Drag handle — press-and-hold, then move by mouse or finger to
+                reorder this lane among the others. */}
+            <GestureDetector gesture={lanePan}>
+              <Pressable hitSlop={6} className="mr-0.5 rounded-md p-1" accessibilityLabel={`Drag to reorder ${column.name}`}>
+                <DotGridIcon size={16} color={palette.textFaint} />
+              </Pressable>
+            </GestureDetector>
+            <Text className="text-h3 font-semibold text-text-hi" numberOfLines={1}>
+              {column.name}
             </Text>
-          </Pressable>
-        ) : (
-          // `flex-1` here is the actual fix for mouse-wheel scroll: without an
-          // explicit flex value the ScrollView sizes to its content along the
-          // column's main axis and never gets a bounded height, so it can
-          // never establish an internal scroll region — the parent track just
-          // grows past the viewport instead of scrolling internally.
-          <ScrollView
-            className="flex-1"
-            style={{ minHeight: 0 }}
-            showsVerticalScrollIndicator={false}
-            contentContainerStyle={{ paddingBottom: 8 }}
-          >
-            {items.map((item) => (
-              <DraggableCard
-                key={item.id}
-                item={item}
-                prevColumnId={prevColumnId}
-                nextColumnId={nextColumnId}
-                workspaceContext={workspaceContext}
-                lockedByName={locks[item.id]}
-                onPress={onCardPress}
-                onMoveCard={onMoveCard}
-                onHoverColumn={onHoverColumn}
-                resolveColumn={resolveColumn}
-              />
-            ))}
-          </ScrollView>
-        )}
+            <View className="rounded-pill bg-ink-raised px-2 py-0.5">
+              <Text className="text-meta text-text-low">{items.length}</Text>
+            </View>
+          </View>
+          {/* Explicit lane reorder — always works, no matter the input. */}
+          <View className="flex-row items-center gap-0.5">
+            <LaneNudge disabled={index === 0} rotate onPress={() => onMoveLane(column.id, -1)} />
+            <LaneNudge disabled={index === count - 1} onPress={() => onMoveLane(column.id, 1)} />
+            <Pressable
+              onPress={() => onAddCard(column)}
+              hitSlop={8}
+              className="ml-1 h-7 w-7 items-center justify-center rounded-full bg-ink-raised"
+              accessibilityLabel={`Add card to ${column.name}`}
+            >
+              <PlusIcon size={16} color={palette.textMid} />
+            </Pressable>
+          </View>
+        </View>
+
+        {/* Body — the actual drop area / scrollable card list. */}
+        <View className="flex-1 p-2" style={{ minHeight: 0 }}>
+          {isDragging ? (
+            <View className="flex-1 items-center justify-center rounded-md border border-dashed border-ink-hair">
+              <Text className="text-sub text-text-faint">Drop to place this lane</Text>
+            </View>
+          ) : items.length === 0 ? (
+            <Pressable
+              onPress={() => onAddCard(column)}
+              className="flex-1 items-center justify-center rounded-md border border-dashed border-ink-hair"
+            >
+              <Text className="text-sub text-text-faint">
+                {isDropTarget ? "Release to drop here" : "Drop a card here"}
+              </Text>
+            </Pressable>
+          ) : (
+            // The lane has an explicit height → this View is flex-1 within a
+            // bounded parent → the ScrollView gets a real, finite height and
+            // can finally establish an internal scroll region. `minHeight: 0`
+            // is required at each flex step on web or the child's intrinsic
+            // content height wins and the whole thing grows instead of scrolls.
+            <ScrollView
+              className="flex-1"
+              style={{ minHeight: 0 }}
+              showsVerticalScrollIndicator={false}
+              contentContainerStyle={{ paddingBottom: 8 }}
+            >
+              {items.map((item) => (
+                <DraggableCard
+                  key={item.id}
+                  item={item}
+                  prevColumnId={prevColumnId}
+                  nextColumnId={nextColumnId}
+                  workspaceContext={workspaceContext}
+                  lockedByName={locks[item.id]}
+                  onPress={onCardPress}
+                  onMoveCard={onMoveCard}
+                  onHoverColumn={onHoverColumn}
+                  resolveColumn={resolveColumn}
+                />
+              ))}
+            </ScrollView>
+          )}
+        </View>
       </Animated.View>
     </Animated.View>
   );

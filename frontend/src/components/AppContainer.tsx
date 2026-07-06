@@ -132,14 +132,12 @@ function CursorGlow() {
 
   const x = useSharedValue(anchorX);
   const y = useSharedValue(anchorY);
-  const opacity = useSharedValue(0);
+  // Starts fully present at a fixed anchor so a freshly-navigated screen never
+  // shows a flat-black gap while waiting for the first mouse move.
+  const opacity = useSharedValue(1);
   const isActive = useAppActive();
 
   useEffect(() => {
-    // Fade in immediately at the default anchor — no flat-black gap while
-    // waiting for the first mouse move on a freshly-mounted screen.
-    opacity.value = withTiming(1, { duration: 500 });
-
     if (Platform.OS !== "web" || typeof window === "undefined") return;
     const onMove = (e: MouseEvent) => {
       if (!isActive.current) return;
