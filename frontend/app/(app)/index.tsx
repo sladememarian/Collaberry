@@ -16,6 +16,7 @@ import {
   KanbanIcon,
   LogoutIcon,
   PlusIcon,
+  UsersIcon,
 } from "@/components/icons";
 import { Avatar } from "@/components/ui/Avatar";
 import { ContextBadge } from "@/components/ui/Badge";
@@ -25,6 +26,7 @@ import { GlassCard } from "@/components/ui/GlassCard";
 import { Sheet } from "@/components/ui/Sheet";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { TextField } from "@/components/ui/TextField";
+import { MembersSheet } from "@/components/workspace/MembersSheet";
 import { useAuth } from "@/context/AuthContext";
 import { contextAccent, palette, type WorkspaceContext } from "@/theme/tokens";
 import type { Board, Workspace } from "@/types";
@@ -96,6 +98,7 @@ export default function HomeScreen() {
   // --- create sheets ------------------------------------------------------ //
   const [wsSheet, setWsSheet] = useState(false);
   const [boardSheet, setBoardSheet] = useState(false);
+  const [membersSheet, setMembersSheet] = useState(false);
 
   return (
     <AppContainer>
@@ -164,10 +167,16 @@ export default function HomeScreen() {
             {active ? `${active.name} · Boards` : "Boards"}
           </Text>
           {active ? (
-            <Pressable onPress={() => setBoardSheet(true)} className="flex-row items-center gap-1">
-              <PlusIcon size={15} color={palette.purpleSoft} />
-              <Text className="text-sub font-semibold text-brand-purple-soft">New board</Text>
-            </Pressable>
+            <View className="flex-row items-center gap-4">
+              <Pressable onPress={() => setMembersSheet(true)} className="flex-row items-center gap-1">
+                <UsersIcon size={15} color={palette.textMid} />
+                <Text className="text-sub font-semibold text-text-mid">Members</Text>
+              </Pressable>
+              <Pressable onPress={() => setBoardSheet(true)} className="flex-row items-center gap-1">
+                <PlusIcon size={15} color={palette.purpleSoft} />
+                <Text className="text-sub font-semibold text-brand-purple-soft">New board</Text>
+              </Pressable>
+            </View>
           ) : null}
         </View>
 
@@ -218,6 +227,15 @@ export default function HomeScreen() {
           setBoards((prev) => [...prev, b]);
           setBoardSheet(false);
         }}
+      />
+      <MembersSheet
+        open={membersSheet}
+        workspace={active}
+        currentUser={user}
+        onClose={() => setMembersSheet(false)}
+        onUpdated={(ws) =>
+          setWorkspaces((prev) => prev.map((w) => (w.id === ws.id ? ws : w)))
+        }
       />
     </AppContainer>
   );

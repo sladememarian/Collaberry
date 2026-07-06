@@ -29,6 +29,12 @@ export const palette = {
   success: "#34D399",
   warn: "#FBBF24",
   danger: "#F87171",
+
+  // Berry accents — the fruit behind the brand. Add-only garnish swatches that
+  // sit harmoniously between the purple and blue neons. Use sparingly.
+  raspberry: "#E85C9A",
+  blueberry: "#5B7BF5",
+  blackberry: "#4B2E6B",
 } as const;
 
 export const radius = {

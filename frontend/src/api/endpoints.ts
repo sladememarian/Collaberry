@@ -28,6 +28,11 @@ export const authApi = {
     }),
 
   me: () => request<UserPublic>("/api/v1/auth/me"),
+
+  // Members are added to a workspace by user id, but a human only knows an email;
+  // this resolves one to the other so the add-member flow can hand off to addMember.
+  userByEmail: (email: string) =>
+    request<UserPublic>(`/api/v1/auth/users/by-email?email=${encodeURIComponent(email)}`),
 };
 
 // --- workspace-service ---------------------------------------------------- //
@@ -70,6 +75,7 @@ export const workspaceApi = {
       assignees?: string[];
       tags?: string[];
       due_date?: string | null;
+      priority?: number;
     },
   ) =>
     request<Item>(`/api/v1/workspace/boards/${boardId}/items`, {
@@ -87,6 +93,7 @@ export const workspaceApi = {
       assignees: string[];
       tags: string[];
       due_date: string | null;
+      priority: number;
     }>,
   ) => request<Item>(`/api/v1/workspace/items/${itemId}`, { method: "PATCH", body: patch }),
 

@@ -96,6 +96,8 @@ export interface Item {
   assignees: string[];
   tags: string[];
   due_date: string | null;
+  /** 0 none · 1 low · 2 medium · 3 high. */
+  priority: number;
   created_by: string;
   updated_at: string;
 }

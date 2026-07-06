@@ -184,6 +184,15 @@ export function TrashIcon({ size = 20, color = palette.textHi, strokeWidth = 2 }
   );
 }
 
+export function FlagIcon({ size = 16, color = palette.textHi, strokeWidth = 2 }: IconProps) {
+  return (
+    <Svg {...base(size)}>
+      <Path d="M5 21V4" {...stroke(color, strokeWidth)} />
+      <Path d="M5 4h11l-2 3.5L16 11H5" {...stroke(color, strokeWidth)} />
+    </Svg>
+  );
+}
+
 export function LogoutIcon({ size = 20, color = palette.textHi, strokeWidth = 2 }: IconProps) {
   return (
     <Svg {...base(size)}>
@@ -211,6 +220,33 @@ export function BrandMark({ size = 34 }: { size?: number }) {
     <Svg width={size} height={size} viewBox="0 0 40 40" fill="none">
       <Circle cx="15" cy="20" r="10" stroke={palette.purple} strokeWidth="3" />
       <Circle cx="25" cy="20" r="10" stroke={palette.blue} strokeWidth="3" opacity={0.9} />
+    </Svg>
+  );
+}
+
+/**
+ * A little berry glyph — a cluster of three fruit with a sprig of leaf, tinted
+ * with the berry accent swatches. The friendly counterpart to the BrandMark's
+ * rings; use it as a subtle brand garnish (empty states, footers, splashes).
+ */
+export function BerryMark({ size = 28 }: { size?: number }) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      {/* leaf sprig */}
+      <Path
+        d="M12 4c1.4-1.4 3.6-1.6 5-1.2-.4 1.4-.6 3.6-2 5-1.4 1.4-3 .6-3.6 0-.6-.6-.8-2.4.6-3.8z"
+        fill={palette.success}
+        opacity={0.85}
+      />
+      <Path d="M12 4v4" {...stroke(palette.success, 1.4)} />
+      {/* berry cluster */}
+      <Circle cx="8.5" cy="13" r="3.4" fill={palette.raspberry} />
+      <Circle cx="15.5" cy="13" r="3.4" fill={palette.blueberry} />
+      <Circle cx="12" cy="18" r="3.4" fill={palette.blackberry} />
+      {/* seed highlights */}
+      <Circle cx="8.5" cy="13" r="0.8" fill={palette.textHi} opacity={0.5} />
+      <Circle cx="15.5" cy="13" r="0.8" fill={palette.textHi} opacity={0.5} />
+      <Circle cx="12" cy="18" r="0.8" fill={palette.textHi} opacity={0.4} />
     </Svg>
   );
 }

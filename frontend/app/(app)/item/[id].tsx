@@ -21,7 +21,7 @@ import {
 import { ApiError } from "@/api/client";
 import { presenceApi, workspaceApi } from "@/api/endpoints";
 import { AppContainer } from "@/components/AppContainer";
-import { ArrowLeftIcon, CheckIcon, LockIcon, PlusIcon, TrashIcon } from "@/components/icons";
+import { ArrowLeftIcon, CheckIcon, FlagIcon, LockIcon, PlusIcon, TrashIcon } from "@/components/icons";
 import { Checkbox } from "@/components/editor/blocks/Checkbox";
 import {
   DocumentView,
@@ -30,10 +30,12 @@ import {
   type EditorBlock,
 } from "@/components/editor/DocumentView";
 import { ContextBadge } from "@/components/ui/Badge";
+import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { GlassCard } from "@/components/ui/GlassCard";
 import { useAuth } from "@/context/AuthContext";
 import { palette } from "@/theme/tokens";
+import { PRIORITIES, priorityMeta } from "@/theme/priority";
 import type { ChecklistData, ChecklistEntry, DocumentData, Item } from "@/types";
 
 type SaveState = "idle" | "saving" | "saved";
@@ -49,8 +51,17 @@ export default function ItemScreen() {
   const [error, setError] = useState<string | null>(null);
   const [lockedBy, setLockedBy] = useState<string | null>(null); // someone else's name
   const [save, setSave] = useState<SaveState>("idle");
+  const [confirmDelete, setConfirmDelete] = useState(false);
 
   const readOnly = Boolean(lockedBy);
+
+  // Robust back: on web a deep-linked screen has no history, so router.back()
+  // silently no-ops. Fall back to the board (or home) so the arrow always works.
+  const goBack = useCallback(() => {
+    if (router.canGoBack()) router.back();
+    else if (boardId) router.replace({ pathname: "/(app)/board/[id]", params: { id: String(boardId) } });
+    else router.replace("/(app)");
+  }, [router, boardId]);
 
   // --- load + lock -------------------------------------------------------- //
   useEffect(() => {
@@ -125,7 +136,7 @@ export default function ItemScreen() {
   if (error || !item) {
     return (
       <AppContainer>
-        <Header onBack={() => router.back()} save="idle" />
+        <Header onBack={goBack} save="idle" />
         <EmptyState title="Nothing to show" body={error ?? undefined} />
       </AppContainer>
     );
@@ -134,12 +145,9 @@ export default function ItemScreen() {
   return (
     <AppContainer edgeToEdge>
       <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : undefined} className="flex-1">
-        <Header onBack={() => router.back()} save={save} onDelete={async () => {
-          try {
-            await workspaceApi.deleteItem(itemId);
-            router.back();
-          } catch { /* stay put on failure */ }
-        }} />
+        {/* Delete is destructive and irreversible — confirm first ("are you sure?"
+            card). A cross-platform dialog because Alert.alert is a no-op on web. */}
+        <Header onBack={goBack} save={save} onDelete={readOnly ? undefined : () => setConfirmDelete(true)} />
 
         <ScrollView className="flex-1" contentContainerStyle={{ padding: 20, paddingBottom: 60 }} keyboardShouldPersistTaps="handled">
           {lockedBy ? (
@@ -167,6 +175,15 @@ export default function ItemScreen() {
             multiline
           />
 
+          <PriorityPicker
+            value={item.priority}
+            readOnly={readOnly}
+            onChange={(priority) => {
+              setItem((cur) => (cur ? { ...cur, priority } : cur));
+              persist({ priority });
+            }}
+          />
+
           <View className="my-5 h-px bg-ink-border" />
 
           {item.type === "card" && <CardBody item={item} readOnly={readOnly} onChange={(desc) => persist({ data: { description: desc } })} />}
@@ -181,7 +198,66 @@ export default function ItemScreen() {
           )}
         </ScrollView>
       </KeyboardAvoidingView>
+
+      <ConfirmDialog
+        open={confirmDelete}
+        title="Delete this item?"
+        message="This can't be undone."
+        confirmLabel="Delete"
+        destructive
+        onCancel={() => setConfirmDelete(false)}
+        onConfirm={async () => {
+          setConfirmDelete(false);
+          try {
+            await workspaceApi.deleteItem(itemId);
+            goBack();
+          } catch {
+            /* stay put on failure */
+          }
+        }}
+      />
     </AppContainer>
+  );
+}
+
+// --------------------------------------------------------------------------- //
+/** Inline 3-state (+none) priority selector. Persists on tap. */
+function PriorityPicker({
+  value,
+  readOnly,
+  onChange,
+}: {
+  value: number;
+  readOnly: boolean;
+  onChange: (value: number) => void;
+}) {
+  return (
+    <View className="mt-4">
+      <Text className="mb-2 text-meta uppercase text-text-low">Priority</Text>
+      <View className="flex-row gap-2">
+        {PRIORITIES.map((p) => {
+          const on = p.value === value;
+          return (
+            <Pressable
+              key={p.value}
+              disabled={readOnly}
+              onPress={() => onChange(p.value)}
+              className="flex-row items-center gap-1.5 rounded-md border px-3 py-2"
+              style={{
+                borderColor: on ? p.color : palette.border,
+                backgroundColor: on ? `${p.color}1f` : "transparent",
+                opacity: readOnly ? 0.5 : 1,
+              }}
+            >
+              {p.value > 0 ? <FlagIcon size={13} color={on ? p.color : palette.textLow} /> : null}
+              <Text className="text-sub font-medium" style={{ color: on ? p.color : palette.textMid }}>
+                {p.label}
+              </Text>
+            </Pressable>
+          );
+        })}
+      </View>
+    </View>
   );
 }
 

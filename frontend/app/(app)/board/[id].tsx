@@ -38,6 +38,14 @@ export default function BoardScreen() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  // Robust back: a board opened via a deep link (or after the item modal ate the
+  // history entry) leaves router.back() with nothing to pop on web — it no-ops
+  // and the user is stuck. Fall back to Home so the arrow always escapes.
+  const goBack = useCallback(() => {
+    if (router.canGoBack()) router.back();
+    else router.replace("/(app)");
+  }, [router]);
+
   // --- realtime ----------------------------------------------------------- //
   const onEvent = useCallback((change: BoardChange) => {
     const it = change.item;
@@ -120,7 +128,7 @@ export default function BoardScreen() {
   if (error || !board) {
     return (
       <AppContainer>
-        <BoardHeader title="Board" onBack={() => router.back()} presence={[]} connected={false} />
+        <BoardHeader title="Board" onBack={goBack} presence={[]} connected={false} />
         <EmptyState title="Can't load this board" body={error ?? undefined} ctaLabel="Try again" onCta={load} />
       </AppContainer>
     );
@@ -130,7 +138,7 @@ export default function BoardScreen() {
     <AppContainer>
       <BoardHeader
         title={board.name}
-        onBack={() => router.back()}
+        onBack={goBack}
         presence={socket.presence}
         connected={socket.connected}
       />
