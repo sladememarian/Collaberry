@@ -16,14 +16,13 @@
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import Animated, {
   LinearTransition,
-  runOnJS,
   useAnimatedStyle,
   useSharedValue,
   withSpring,
   withTiming,
 } from "react-native-reanimated";
 import React, { useCallback, useMemo, useRef, useState } from "react";
-import { Pressable, ScrollView, Text, useWindowDimensions, View } from "react-native";
+import { Pressable, ScrollView, Text, useWindowDimensions, View, type NativeSyntheticEvent, type NativeScrollEvent } from "react-native";
 
 import { ChevronRightIcon, DotGridIcon, PlusIcon } from "@/components/icons";
 import { glow, palette, type WorkspaceContext } from "@/theme/tokens";
@@ -62,17 +61,23 @@ export function DraggableBoard({
 }: DraggableBoardProps) {
   const { width: screenW } = useWindowDimensions();
 
-  const columnWidth = useMemo(() => {
-    const usable = screenW - GUTTER * 2;
-    if (screenW >= 900) return Math.min(340, (usable - GUTTER * 2) / 2.4);
-    if (screenW >= 600) return (usable - GUTTER) / 1.8;
-    return usable * 0.86;
-  }, [screenW]);
-
   const columns = useMemo(
     () => [...board.columns].sort((a, b) => a.order - b.order),
     [board.columns],
   );
+
+  // Lanes shrink to fill the screen for up to 4 of them (like Trello with a
+  // handful of lists) — add a 5th and width holds steady at the "4-lane" size
+  // instead of continuing to shrink or overflowing sideways; the board scrolls
+  // horizontally from there instead.
+  const columnWidth = useMemo(() => {
+    const available = screenW - GUTTER * 2;
+    const n = Math.max(columns.length, 1);
+    const capped = Math.min(n, 4);
+    const fitWidth = (available - GUTTER * (capped - 1)) / capped;
+    const floor = screenW >= 900 ? 260 : screenW >= 600 ? 220 : available * 0.75;
+    return Math.max(Math.min(fitWidth, 420), floor);
+  }, [screenW, columns.length]);
 
   const byColumn = useMemo(() => {
     const map: Record<string, Item[]> = {};
@@ -82,21 +87,54 @@ export function DraggableBoard({
     return map;
   }, [columns, items]);
 
-  // Page-space x-ranges of each lane, captured on layout, used to hit-test which
-  // lane a dragged card is currently over.
+  // Content-space x-ranges of each lane (stable regardless of scroll position),
+  // captured on layout, used to hit-test which lane a dragged card or lane is
+  // currently over. Gesture coordinates (`e.absoluteX`) come back in page/
+  // window space, so resolving a hit also needs the ScrollView's own
+  // page-space origin (measured once via ref — the actual RN Web mechanism;
+  // measureInWindow lives on the host node, not on layout events) and its live
+  // horizontal scroll offset, both tracked below.
   const laneFrames = useRef<Record<string, { x: number; w: number }>>({});
+  const scrollRef = useRef<ScrollView>(null);
+  const scrollOriginX = useRef(0); // this ScrollView's left edge, in page space
+  const scrollOffsetX = useRef(0); // how far the content has scrolled
   const [hoverColumn, setHoverColumn] = useState<string | null>(null);
+  // The lane currently being dragged by mouse/touch, if any — its column body
+  // gets hidden from hit-testing so it can't hover-target itself.
+  const [draggingLane, setDraggingLane] = useState<string | null>(null);
 
   const setLaneFrame = useCallback((id: string, x: number, w: number) => {
     laneFrames.current[id] = { x, w };
   }, []);
 
-  const resolveColumn = useCallback((pageX: number): string | null => {
-    for (const [id, f] of Object.entries(laneFrames.current)) {
-      if (pageX >= f.x && pageX <= f.x + f.w) return id;
-    }
-    return null;
+  const measureOrigin = useCallback(() => {
+    // `measureInWindow` is attached imperatively to the host node (see
+    // react-native-web's usePlatformMethods) — it's not in ScrollView's public
+    // TS surface, same as it wasn't on View's onLayout event (the original bug
+    // here). Grab it off the actual node instead of the typed ref.
+    const node = scrollRef.current as unknown as {
+      measureInWindow?: (cb: (x: number, y: number, w: number, h: number) => void) => void;
+    } | null;
+    node?.measureInWindow?.((x) => {
+      scrollOriginX.current = x;
+    });
   }, []);
+
+  const onScroll = useCallback((e: NativeSyntheticEvent<NativeScrollEvent>) => {
+    scrollOffsetX.current = e.nativeEvent.contentOffset.x;
+  }, []);
+
+  const resolveColumn = useCallback(
+    (pageX: number, exclude?: string | null): string | null => {
+      const contentX = pageX - scrollOriginX.current + scrollOffsetX.current;
+      for (const [id, f] of Object.entries(laneFrames.current)) {
+        if (id === exclude) continue;
+        if (contentX >= f.x && contentX <= f.x + f.w) return id;
+      }
+      return null;
+    },
+    [],
+  );
 
   const moveLane = useCallback(
     (columnId: string, dir: -1 | 1) => {
@@ -110,10 +148,30 @@ export function DraggableBoard({
     [columns, onReorderColumns],
   );
 
+  // Drag a lane by mouse/touch and drop it onto another lane's slot to swap it
+  // into that position.
+  const dropLaneOn = useCallback(
+    (draggedId: string, targetId: string) => {
+      if (draggedId === targetId) return;
+      const order = columns.map((c) => c.id);
+      const from = order.indexOf(draggedId);
+      const to = order.indexOf(targetId);
+      if (from < 0 || to < 0) return;
+      order.splice(from, 1);
+      order.splice(to, 0, draggedId);
+      onReorderColumns(order);
+    },
+    [columns, onReorderColumns],
+  );
+
   return (
     <ScrollView
+      ref={scrollRef}
       horizontal
       showsHorizontalScrollIndicator={false}
+      onScroll={onScroll}
+      scrollEventThrottle={16}
+      onLayout={measureOrigin}
       contentContainerStyle={{ paddingHorizontal: GUTTER, paddingBottom: GUTTER }}
       className="flex-1"
     >
@@ -129,13 +187,16 @@ export function DraggableBoard({
           width={columnWidth}
           workspaceContext={workspaceContext}
           locks={locks}
-          isDropTarget={hoverColumn === col.id}
+          isDropTarget={hoverColumn === col.id && draggingLane !== col.id}
+          isDragging={draggingLane === col.id}
           onCardPress={onCardPress}
           onAddCard={onAddCard}
           onMoveLane={moveLane}
           onMoveCard={onMoveCard}
           onLaneFrame={setLaneFrame}
           onHoverColumn={setHoverColumn}
+          onLaneDragStart={setDraggingLane}
+          onLaneDrop={dropLaneOn}
           resolveColumn={resolveColumn}
         />
       ))}
@@ -171,13 +232,16 @@ interface ColumnProps {
   workspaceContext: WorkspaceContext;
   locks: ColumnLocks;
   isDropTarget: boolean;
+  isDragging: boolean;
   onCardPress: (item: Item) => void;
   onAddCard: (column: Column) => void;
   onMoveLane: (columnId: string, dir: -1 | 1) => void;
   onMoveCard: (itemId: string, toColumnId: string) => void;
   onLaneFrame: (id: string, x: number, w: number) => void;
   onHoverColumn: (id: string | null) => void;
-  resolveColumn: (pageX: number) => string | null;
+  onLaneDragStart: (id: string | null) => void;
+  onLaneDrop: (draggedId: string, targetId: string) => void;
+  resolveColumn: (pageX: number, exclude?: string | null) => string | null;
 }
 
 function DraggableColumn({
@@ -191,12 +255,15 @@ function DraggableColumn({
   workspaceContext,
   locks,
   isDropTarget,
+  isDragging,
   onCardPress,
   onAddCard,
   onMoveLane,
   onMoveCard,
   onLaneFrame,
   onHoverColumn,
+  onLaneDragStart,
+  onLaneDrop,
   resolveColumn,
 }: ColumnProps) {
   // Drop-target lanes glow and swell slightly — the "space opening up" cue.
@@ -205,18 +272,70 @@ function DraggableColumn({
     borderColor: withTiming(isDropTarget ? palette.purple : "rgba(35,35,45,0.7)", { duration: 160 }),
   }));
 
+  // A dragged lane lifts off the row (scale + shadow + fade) the same way a
+  // dragged card does, and follows the pointer horizontally.
+  const laneX = useSharedValue(0);
+  const laneLift = useSharedValue(0);
+
+  const laneDropTarget = useCallback(
+    (pageX: number) => resolveColumn(pageX, column.id),
+    [resolveColumn, column.id],
+  );
+
+  const lanePan = useMemo(
+    () =>
+      Gesture.Pan()
+        .activateAfterLongPress(160)
+        .runOnJS(true)
+        .onStart(() => {
+          laneLift.value = withSpring(1, SPRING);
+          onLaneDragStart(column.id);
+        })
+        .onUpdate((e) => {
+          laneX.value = e.translationX;
+          onHoverColumn(laneDropTarget(e.absoluteX));
+        })
+        .onEnd((e) => {
+          const target = laneDropTarget(e.absoluteX);
+          if (target) onLaneDrop(column.id, target);
+          laneX.value = withSpring(0, SPRING);
+          laneLift.value = withSpring(0, SPRING);
+        })
+        .onFinalize(() => {
+          onLaneDragStart(null);
+          onHoverColumn(null);
+        }),
+    [column.id, laneX, laneLift, onLaneDragStart, onHoverColumn, onLaneDrop, laneDropTarget],
+  );
+
+  const laneDragStyle = useAnimatedStyle(() => ({
+    transform: [{ translateX: laneX.value }, { scale: 1 + laneLift.value * 0.02 }],
+    zIndex: laneLift.value > 0 ? 40 : 0,
+    boxShadow: laneLift.value > 0 ? `0px ${laneLift.value * 8}px ${laneLift.value * 24}px rgba(0,0,0,${laneLift.value * 0.4})` : undefined,
+    opacity: 1 - laneLift.value * 0.08,
+  }));
+
   return (
-    <View
-      style={{ width }}
+    <Animated.View
+      style={[{ width }, laneDragStyle]}
       className="mr-3.5"
       onLayout={(e) => {
-        // Record page-space x-range for drag hit-testing (measure in window so
-        // horizontal scroll offset is already baked in).
-        e.currentTarget.measureInWindow((x, _y, w) => onLaneFrame(column.id, x, w));
+        // Record this lane's content-space x-range (stable regardless of
+        // scroll position) straight from the layout event. `resolveColumn`
+        // converts an incoming page-space pointer coordinate into this same
+        // space using the ScrollView's measured origin + live scroll offset.
+        onLaneFrame(column.id, e.nativeEvent.layout.x, e.nativeEvent.layout.width);
       }}
     >
       <View className="mb-3 flex-row items-center justify-between px-1">
         <View className="flex-1 flex-row items-center gap-2">
+          {/* Drag handle — press-and-hold, then move by mouse or finger to
+              reorder this lane among the others. */}
+          <GestureDetector gesture={lanePan}>
+            <Pressable hitSlop={6} className="mr-0.5 rounded-md p-1" accessibilityLabel={`Drag to reorder ${column.name}`}>
+              <DotGridIcon size={16} color={palette.textFaint} />
+            </Pressable>
+          </GestureDetector>
           <Text className="text-h3 font-semibold text-text-hi" numberOfLines={1}>
             {column.name}
           </Text>
@@ -243,7 +362,11 @@ function DraggableColumn({
         style={[targetStyle, isDropTarget ? glow(palette.purple, 16) : null]}
         className="min-h-[120px] flex-1 rounded-xl border bg-ink-base/40 p-2"
       >
-        {items.length === 0 ? (
+        {isDragging ? (
+          <View className="m-1 flex-1 items-center justify-center rounded-md border border-dashed border-ink-hair py-8">
+            <Text className="text-sub text-text-faint">Drop to place this lane</Text>
+          </View>
+        ) : items.length === 0 ? (
           <Pressable
             onPress={() => onAddCard(column)}
             className="m-1 flex-1 items-center justify-center rounded-md border border-dashed border-ink-hair py-8"
@@ -271,7 +394,7 @@ function DraggableColumn({
           </ScrollView>
         )}
       </Animated.View>
-    </View>
+    </Animated.View>
   );
 }
 
@@ -302,7 +425,7 @@ interface CardProps {
   onPress: (item: Item) => void;
   onMoveCard: (itemId: string, toColumnId: string) => void;
   onHoverColumn: (id: string | null) => void;
-  resolveColumn: (pageX: number) => string | null;
+  resolveColumn: (pageX: number, exclude?: string | null) => string | null;
 }
 
 function DraggableCard({
@@ -369,10 +492,9 @@ function DraggableCard({
       { scale: 1 + lifted.value * 0.04 },
     ],
     zIndex: lifted.value > 0 ? 50 : 0,
-    shadowColor: "#000",
-    shadowOpacity: lifted.value * 0.45,
-    shadowRadius: lifted.value * 18,
-    shadowOffset: { width: 0, height: lifted.value * 10 },
+    // "boxShadow" (not the deprecated "shadow*" props) — one string, works on
+    // both react-native-web and native RN 0.76+.
+    boxShadow: lifted.value > 0 ? `0px ${lifted.value * 10}px ${lifted.value * 18}px rgba(0,0,0,${lifted.value * 0.45})` : undefined,
     opacity: 1 - lifted.value * 0.05,
   }));
 

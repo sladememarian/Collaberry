@@ -67,12 +67,23 @@ export const contextAccent: Record<
   personal: { color: "#8B8F9E", glow: "rgba(139,143,158,0.35)", label: "Personal" },
 };
 
-/** A soft neon glow for elevated / focused surfaces. Purple by default. */
+/** Bakes a fixed opacity into a hex color; passes rgba/rgb strings through
+ *  untouched (caller already chose their own alpha for those). */
+function withOpacity(color: string, opacity: number): string {
+  if (color.startsWith("rgb")) return color;
+  const hex = color.replace("#", "");
+  const n = parseInt(hex, 16);
+  const r = (n >> 16) & 255;
+  const g = (n >> 8) & 255;
+  const b = n & 255;
+  return `rgba(${r}, ${g}, ${b}, ${opacity})`;
+}
+
+/** A soft neon glow for elevated / focused surfaces. Purple by default.
+ *  Uses "boxShadow" (not the deprecated "shadow*" props) — supported on both
+ *  react-native-web and native RN 0.76+. */
 export const glow = (color: string = palette.purple, radius = 24) => ({
-  shadowColor: color,
-  shadowOpacity: 0.55,
-  shadowRadius: radius,
-  shadowOffset: { width: 0, height: 0 },
+  boxShadow: `0px 0px ${radius}px ${withOpacity(color, 0.55)}`,
   elevation: 12,
 });
 

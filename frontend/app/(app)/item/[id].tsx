@@ -7,13 +7,6 @@
  */
 import { useLocalSearchParams, useRouter } from "expo-router";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import Animated, {
-  useAnimatedStyle,
-  useSharedValue,
-  withSequence,
-  withSpring,
-  withTiming,
-} from "react-native-reanimated";
 import {
   ActivityIndicator,
   KeyboardAvoidingView,
@@ -42,7 +35,7 @@ import { EmptyState } from "@/components/ui/EmptyState";
 import { GlassCard } from "@/components/ui/GlassCard";
 import { useAuth } from "@/context/AuthContext";
 import { palette } from "@/theme/tokens";
-import { PRIORITIES, priorityMeta } from "@/theme/priority";
+import { PRIORITIES } from "@/theme/priority";
 import type { ChecklistData, ChecklistEntry, DocumentData, Item, ItemType } from "@/types";
 
 type SaveState = "idle" | "saving" | "saved";
@@ -336,67 +329,29 @@ function PriorityPicker({
     <View className="mt-4">
       <Text className="mb-2 text-meta uppercase text-text-low">Priority</Text>
       <View className="flex-row gap-2">
-        {PRIORITIES.map((p) => (
-          <PriorityChip
-            key={p.value}
-            color={p.color}
-            label={p.label}
-            flag={p.value > 0}
-            selected={p.value === value}
-            disabled={readOnly}
-            onPress={() => onChange(p.value)}
-          />
-        ))}
+        {PRIORITIES.map((p) => {
+          const on = p.value === value;
+          return (
+            <Pressable
+              key={p.value}
+              disabled={readOnly}
+              onPress={() => onChange(p.value)}
+              className="flex-row items-center gap-1.5 rounded-md border px-3 py-2"
+              style={{
+                borderColor: on ? p.color : palette.border,
+                backgroundColor: on ? `${p.color}1f` : "transparent",
+                opacity: readOnly ? 0.5 : 1,
+              }}
+            >
+              {p.value > 0 ? <FlagIcon size={13} color={on ? p.color : palette.textLow} /> : null}
+              <Text className="text-sub font-medium" style={{ color: on ? p.color : palette.textMid }}>
+                {p.label}
+              </Text>
+            </Pressable>
+          );
+        })}
       </View>
     </View>
-  );
-}
-
-/** One priority option — springs up with a crisp scale pop + color shift the
- *  instant it's chosen (ui-ux-motion skill §2: priority-adjustment delight). */
-function PriorityChip({
-  color,
-  label,
-  flag,
-  selected,
-  disabled,
-  onPress,
-}: {
-  color: string;
-  label: string;
-  flag: boolean;
-  selected: boolean;
-  disabled: boolean;
-  onPress: () => void;
-}) {
-  const wasSelected = useRef(selected);
-  const pop = useSharedValue(0);
-
-  useEffect(() => {
-    if (selected && !wasSelected.current) {
-      pop.value = withSequence(withSpring(1, { damping: 6, stiffness: 260 }), withSpring(0));
-    }
-    wasSelected.current = selected;
-  }, [selected, pop]);
-
-  const style = useAnimatedStyle(() => ({
-    transform: [{ scale: 1 + pop.value * 0.12 }],
-    borderColor: withTiming(selected ? color : palette.border, { duration: 180 }),
-    backgroundColor: withTiming(selected ? `${color}1f` : "transparent", { duration: 180 }),
-  }));
-
-  return (
-    <Pressable disabled={disabled} onPress={onPress} style={{ opacity: disabled ? 0.5 : 1 }}>
-      <Animated.View
-        style={style}
-        className="flex-row items-center gap-1.5 rounded-md border px-3 py-2"
-      >
-        {flag ? <FlagIcon size={13} color={selected ? color : palette.textLow} /> : null}
-        <Text className="text-sub font-medium" style={{ color: selected ? color : palette.textMid }}>
-          {label}
-        </Text>
-      </Animated.View>
-    </Pressable>
   );
 }
 
