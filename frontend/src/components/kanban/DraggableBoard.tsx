@@ -66,17 +66,18 @@ export function DraggableBoard({
     [board.columns],
   );
 
-  // Lanes shrink to fill the screen for up to 4 of them (like Trello with a
-  // handful of lists) — add a 5th and width holds steady at the "4-lane" size
-  // instead of continuing to shrink or overflowing sideways; the board scrolls
-  // horizontally from there instead.
+  // Lanes always shrink (or grow) to fit every lane on screen at once — add a
+  // 5th, 6th, etc. and each lane narrows to make room, so the board keeps
+  // filling the viewport instead of overflowing sideways. Only once lanes
+  // would get uncomfortably narrow does a floor kick in and the board starts
+  // scrolling horizontally from there.
   const columnWidth = useMemo(() => {
     const available = screenW - GUTTER * 2;
     const n = Math.max(columns.length, 1);
-    const capped = Math.min(n, 4);
-    const fitWidth = (available - GUTTER * (capped - 1)) / capped;
+    const fitWidth = (available - GUTTER * (n - 1)) / n;
     const floor = screenW >= 900 ? 260 : screenW >= 600 ? 220 : available * 0.75;
-    return Math.max(Math.min(fitWidth, 420), floor);
+    const cap = 420; // one or two lanes shouldn't stretch absurdly wide
+    return Math.max(Math.min(fitWidth, cap), floor);
   }, [screenW, columns.length]);
 
   const byColumn = useMemo(() => {
@@ -285,7 +286,7 @@ function DraggableColumn({
   const lanePan = useMemo(
     () =>
       Gesture.Pan()
-        .activateAfterLongPress(160)
+        .activateAfterLongPress(80)
         .runOnJS(true)
         .onStart(() => {
           laneLift.value = withSpring(1, SPRING);
@@ -322,7 +323,7 @@ function DraggableColumn({
 
   return (
     <Animated.View
-      style={[{ width }, laneDragStyle]}
+      style={[{ width, height: "100%" }, laneDragStyle]}
       className="mr-3.5"
       onLayout={(e) => {
         // Record this lane's content-space x-range (stable regardless of
@@ -363,9 +364,12 @@ function DraggableColumn({
         </View>
       </View>
 
+      {/* The lane's "track" — a distinct, always-visible surface (Gestalt
+          enclosure) so a column reads as a container even when it holds zero
+          or one card, not just empty black space under the header. */}
       <Animated.View
-        style={[targetStyle, isDropTarget ? glow(palette.purple, 16) : null]}
-        className="min-h-[120px] flex-1 rounded-xl border bg-ink-base/40 p-2"
+        style={[{ minHeight: 0 }, targetStyle, isDropTarget ? glow(palette.purple, 16) : null]}
+        className="flex-1 rounded-xl border border-ink-border/70 bg-ink-raised/40 p-2"
       >
         {isDragging ? (
           <View className="m-1 flex-1 items-center justify-center rounded-md border border-dashed border-ink-hair py-8">
@@ -381,7 +385,17 @@ function DraggableColumn({
             </Text>
           </Pressable>
         ) : (
-          <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 8 }}>
+          // `flex-1` here is the actual fix for mouse-wheel scroll: without an
+          // explicit flex value the ScrollView sizes to its content along the
+          // column's main axis and never gets a bounded height, so it can
+          // never establish an internal scroll region — the parent track just
+          // grows past the viewport instead of scrolling internally.
+          <ScrollView
+            className="flex-1"
+            style={{ minHeight: 0 }}
+            showsVerticalScrollIndicator={false}
+            contentContainerStyle={{ paddingBottom: 8 }}
+          >
             {items.map((item) => (
               <DraggableCard
                 key={item.id}
@@ -468,7 +482,7 @@ function DraggableCard({
   const pan = useMemo(
     () =>
       Gesture.Pan()
-        .activateAfterLongPress(160)
+        .activateAfterLongPress(80)
         .runOnJS(true)
         .onStart(() => {
           lifted.value = withSpring(1, SPRING);
