@@ -344,9 +344,12 @@ function DraggableColumn({
   }));
 
   return (
+    // NOTE: NativeWind `className` is dropped on reanimated Animated.View in
+    // this setup (plain View/ScrollView keep it) — so every layout-critical
+    // style on the two Animated.Views here MUST be inline, not className, or
+    // it silently no-ops (this was the real cause of the dead lane scroll).
     <Animated.View
-      style={[{ width, height }, laneDragStyle]}
-      className="mr-3.5"
+      style={[{ width, height, marginRight: 14 }, laneDragStyle]}
       onLayout={(e) => {
         // Record this lane's content-space x-range (stable regardless of
         // scroll position) straight from the layout event. `resolveColumn`
@@ -364,11 +367,17 @@ function DraggableColumn({
           own a bounded height and scroll on its own. */}
       <Animated.View
         style={[
-          { minHeight: 0, backgroundColor: "rgba(18,18,22,0.72)" },
-          targetStyle,
+          {
+            flex: 1,
+            minHeight: 0,
+            overflow: "hidden",
+            borderWidth: 1,
+            borderRadius: 14,
+            backgroundColor: "rgba(18,18,22,0.72)",
+          },
+          targetStyle, // supplies the (animated) borderColor
           isDropTarget ? glow(palette.purple, 16) : null,
         ]}
-        className="flex-1 overflow-hidden rounded-xl border"
       >
         {/* Header, anchored to the top of the track (own tint + hairline
             divider) so it reads as the column's cap, not a floating label. */}
