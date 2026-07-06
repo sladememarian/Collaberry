@@ -133,3 +133,26 @@ async def me(request: Request, claims: TokenClaims = Depends(current_user)) -> U
         display_name=user["display_name"],
         created_at=user["created_at"],
     )
+
+
+@app.get("/api/v1/auth/users/by-email", response_model=UserPublic, tags=["auth"])
+async def user_by_email(
+    email: str, request: Request, claims: TokenClaims = Depends(current_user)
+) -> UserPublic:
+    """Resolve an email to its public profile.
+
+    Workspaces are shared by email — a human knows the person they're inviting by
+    address, not by opaque id — but membership is stored by ``user_id``. This is the
+    lookup that bridges the two. It requires a valid token (the caller must already
+    be signed in to invite anyone), which is what stops it from being an open email
+    enumeration endpoint despite auth-service's routes being public at the edge.
+    """
+    user = await repo(request).get_by_email(email)
+    if not user:
+        raise HTTPException(status_code=404, detail="No one is registered with that email")
+    return UserPublic(
+        id=user["id"],
+        email=user["email"],
+        display_name=user["display_name"],
+        created_at=user["created_at"],
+    )

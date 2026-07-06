@@ -63,6 +63,45 @@ async def test_item_lifecycle_and_ordering(ctx):
     assert {i["title"] for i in items} == {"A", "B"}
 
 
+async def test_item_priority_defaults_sets_and_updates(ctx):
+    alice = ctx.user("alice")
+    _, board = await _make_board(alice)
+    todo = board["columns"][0]["id"]
+
+    # Default priority is 0 ("none") when omitted.
+    default = (await alice.post(
+        f"/api/v1/workspace/boards/{board['id']}/items",
+        json={"type": "card", "title": "no prio", "column_id": todo},
+    )).json()
+    assert default["priority"] == 0
+
+    # Priority can be set at creation.
+    high = (await alice.post(
+        f"/api/v1/workspace/boards/{board['id']}/items",
+        json={"type": "card", "title": "urgent", "column_id": todo, "priority": 3},
+    )).json()
+    assert high["priority"] == 3
+
+    # And changed later via PATCH, without touching anything else.
+    patched = (await alice.patch(
+        f"/api/v1/workspace/items/{default['id']}", json={"priority": 2}
+    )).json()
+    assert patched["priority"] == 2
+    assert patched["title"] == "no prio"  # untouched
+
+
+async def test_item_priority_out_of_range_is_rejected(ctx):
+    alice = ctx.user("alice")
+    _, board = await _make_board(alice)
+    todo = board["columns"][0]["id"]
+
+    r = await alice.post(
+        f"/api/v1/workspace/boards/{board['id']}/items",
+        json={"type": "card", "title": "bad", "column_id": todo, "priority": 9},
+    )
+    assert r.status_code == 422  # 0-3 only
+
+
 async def test_mutations_publish_board_events(ctx):
     alice = ctx.user("alice")
     _, board = await _make_board(alice)

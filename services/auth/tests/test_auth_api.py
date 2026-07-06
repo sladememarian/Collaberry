@@ -54,6 +54,38 @@ async def test_jwks_is_served(client):
     assert r.json()["keys"][0]["kty"] == "RSA"
 
 
+async def test_user_lookup_by_email(client):
+    reg = await client.post("/api/v1/auth/register", json=CREDS)
+    user_id = reg.json()["user"]["id"]
+    token = reg.json()["access_token"]
+    headers = {"Authorization": f"Bearer {token}"}
+
+    # A signed-in caller can resolve an email to the invitee's public profile.
+    found = await client.get(
+        "/api/v1/auth/users/by-email", params={"email": CREDS["email"]}, headers=headers
+    )
+    assert found.status_code == 200, found.text
+    assert found.json()["id"] == user_id
+    assert found.json()["display_name"] == "Ada"
+
+    # Stored lowercased, so a differently-cased address still resolves.
+    mixed = await client.get(
+        "/api/v1/auth/users/by-email", params={"email": "Ada@Collaberry.DEV"}, headers=headers
+    )
+    assert mixed.status_code == 200
+
+    unknown = await client.get(
+        "/api/v1/auth/users/by-email", params={"email": "ghost@collaberry.dev"}, headers=headers
+    )
+    assert unknown.status_code == 404
+
+
+async def test_user_lookup_requires_a_token(client):
+    await client.post("/api/v1/auth/register", json=CREDS)
+    anon = await client.get("/api/v1/auth/users/by-email", params={"email": CREDS["email"]})
+    assert anon.status_code == 401
+
+
 @pytest.mark.parametrize("bad", [
     {"email": "not-an-email", "password": "longenough", "display_name": "x"},
     {"email": "a@b.com", "password": "short", "display_name": "x"},

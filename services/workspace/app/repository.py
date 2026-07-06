@@ -145,6 +145,7 @@ class WorkspaceRepository:
             "assignees": body.assignees,
             "tags": body.tags,
             "due_date": body.due_date,
+            "priority": body.priority,
             "created_by": user_id,
             "updated_at": utcnow(),
         }
@@ -179,6 +180,8 @@ class WorkspaceRepository:
             changes["tags"] = patch.tags
         if patch.due_date is not None:
             changes["due_date"] = patch.due_date
+        if patch.priority is not None:
+            changes["priority"] = patch.priority
         if patch.column_id is not None and patch.column_id != item["column_id"]:
             changes["column_id"] = patch.column_id
             moved = True

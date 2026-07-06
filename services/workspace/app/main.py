@@ -286,6 +286,9 @@ def _to_item(doc: dict) -> ItemPublic:
         assignees=doc["assignees"],
         tags=doc["tags"],
         due_date=doc.get("due_date"),
+        # .get with a default so the 41 items created before this field existed
+        # still deserialise cleanly (they read back as priority 0 / "none").
+        priority=doc.get("priority", 0),
         created_by=doc["created_by"],
         updated_at=doc["updated_at"],
     )

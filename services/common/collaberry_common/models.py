@@ -136,6 +136,9 @@ class ItemCreate(BaseModel):
     assignees: list[str] = Field(default_factory=list)
     tags: list[str] = Field(default_factory=list)
     due_date: datetime | None = None
+    # 0 none · 1 low · 2 medium · 3 high. An int (not an enum) so it sorts
+    # naturally and never needs a migration if the labels are ever re-tuned.
+    priority: int = Field(default=0, ge=0, le=3)
 
     @model_validator(mode="after")
     def _shape_matches_type(self) -> "ItemCreate":
@@ -151,6 +154,7 @@ class ItemUpdate(BaseModel):
     assignees: list[str] | None = None
     tags: list[str] | None = None
     due_date: datetime | None = None
+    priority: int | None = Field(default=None, ge=0, le=3)
 
     @field_validator("data")
     @classmethod
@@ -170,6 +174,7 @@ class ItemPublic(BaseModel):
     assignees: list[str]
     tags: list[str]
     due_date: datetime | None
+    priority: int = 0
     created_by: str
     updated_at: datetime
 
