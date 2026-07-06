@@ -99,6 +99,20 @@ class BoardCreate(BaseModel):
     columns: list[str] = Field(default_factory=lambda: ["To do", "In progress", "Done"])
 
 
+class BoardColumnCreate(BaseModel):
+    # Add a lane to an existing board (e.g. "Code review", "Scrum review").
+    name: str = Field(min_length=1, max_length=60)
+
+
+class BoardColumnUpdate(BaseModel):
+    name: str = Field(min_length=1, max_length=60)
+
+
+class BoardColumnReorder(BaseModel):
+    # The full set of column ids in their new left-to-right order.
+    order: list[str] = Field(min_length=1)
+
+
 class BoardPublic(BaseModel):
     id: str
     workspace_id: str
@@ -148,6 +162,9 @@ class ItemCreate(BaseModel):
 
 class ItemUpdate(BaseModel):
     title: str | None = Field(default=None, min_length=1, max_length=200)
+    # Switch a card ↔ checklist ↔ document in place. When set, `data` should be
+    # sent alongside it so the blob matches the new variant (validated below).
+    type: ItemType | None = None
     column_id: str | None = None
     order: float | None = None
     data: dict[str, Any] | None = None
@@ -160,6 +177,14 @@ class ItemUpdate(BaseModel):
     @classmethod
     def _non_null_data(cls, v: dict | None) -> dict | None:
         return v
+
+    @model_validator(mode="after")
+    def _shape_matches_type(self) -> "ItemUpdate":
+        # Only enforce shape when the caller is changing the type and supplying
+        # the new data together; a bare field patch leaves data untouched.
+        if self.type is not None and self.data is not None:
+            _validate_item_data(self.type, self.data)
+        return self
 
 
 class ItemPublic(BaseModel):

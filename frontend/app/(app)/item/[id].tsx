@@ -7,6 +7,13 @@
  */
 import { useLocalSearchParams, useRouter } from "expo-router";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import Animated, {
+  useAnimatedStyle,
+  useSharedValue,
+  withSequence,
+  withSpring,
+  withTiming,
+} from "react-native-reanimated";
 import {
   ActivityIndicator,
   KeyboardAvoidingView,
@@ -21,7 +28,7 @@ import {
 import { ApiError } from "@/api/client";
 import { presenceApi, workspaceApi } from "@/api/endpoints";
 import { AppContainer } from "@/components/AppContainer";
-import { ArrowLeftIcon, CheckIcon, FlagIcon, LockIcon, PlusIcon, TrashIcon } from "@/components/icons";
+import { ArrowLeftIcon, ChecklistIcon, CheckIcon, DocumentIcon, FlagIcon, KanbanIcon, LockIcon, PlusIcon, TrashIcon } from "@/components/icons";
 import { Checkbox } from "@/components/editor/blocks/Checkbox";
 import {
   DocumentView,
@@ -36,7 +43,7 @@ import { GlassCard } from "@/components/ui/GlassCard";
 import { useAuth } from "@/context/AuthContext";
 import { palette } from "@/theme/tokens";
 import { PRIORITIES, priorityMeta } from "@/theme/priority";
-import type { ChecklistData, ChecklistEntry, DocumentData, Item } from "@/types";
+import type { ChecklistData, ChecklistEntry, DocumentData, Item, ItemType } from "@/types";
 
 type SaveState = "idle" | "saving" | "saved";
 
@@ -123,6 +130,27 @@ export default function ItemScreen() {
     if (timer.current) clearTimeout(timer.current);
   }, []);
 
+  // --- type switch -------------------------------------------------------- //
+  // Changing an item's kind (card ↔ checklist ↔ document) reshapes its data.
+  // We carry the text across where it makes sense so a switch isn't destructive,
+  // and persist immediately (not debounced) since it's a structural change.
+  const changeType = useCallback(
+    async (nextType: ItemType) => {
+      if (readOnly || !item || item.type === nextType) return;
+      const data = convertItemData(item, nextType);
+      setSave("saving");
+      try {
+        const updated = await workspaceApi.updateItem(itemId, { type: nextType, data });
+        setItem(updated);
+        setSave("saved");
+        setTimeout(() => setSave("idle"), 1200);
+      } catch {
+        setSave("idle");
+      }
+    },
+    [itemId, item, readOnly],
+  );
+
   if (loading) {
     return (
       <AppContainer>
@@ -175,6 +203,8 @@ export default function ItemScreen() {
             multiline
           />
 
+          <TypeSwitcher value={item.type} readOnly={readOnly} onChange={changeType} />
+
           <PriorityPicker
             value={item.priority}
             readOnly={readOnly}
@@ -221,6 +251,77 @@ export default function ItemScreen() {
 }
 
 // --------------------------------------------------------------------------- //
+const TYPE_CHOICES: { type: ItemType; label: string; icon: (c: string) => React.ReactNode }[] = [
+  { type: "card", label: "Task", icon: (c) => <KanbanIcon size={15} color={c} strokeWidth={1.9} /> },
+  { type: "checklist", label: "Checklist", icon: (c) => <ChecklistIcon size={15} color={c} strokeWidth={1.9} /> },
+  { type: "document", label: "Document", icon: (c) => <DocumentIcon size={15} color={c} strokeWidth={1.9} /> },
+];
+
+/** Segmented control to switch a card ↔ checklist ↔ document in place. */
+function TypeSwitcher({
+  value,
+  readOnly,
+  onChange,
+}: {
+  value: ItemType;
+  readOnly: boolean;
+  onChange: (type: ItemType) => void;
+}) {
+  return (
+    <View className="mt-4">
+      <Text className="mb-2 text-meta uppercase text-text-low">Type</Text>
+      <View className="flex-row gap-2">
+        {TYPE_CHOICES.map((c) => {
+          const on = c.type === value;
+          return (
+            <Pressable
+              key={c.type}
+              disabled={readOnly}
+              onPress={() => onChange(c.type)}
+              className="flex-row items-center gap-1.5 rounded-md border px-3 py-2"
+              style={{
+                borderColor: on ? palette.purple : palette.border,
+                backgroundColor: on ? "rgba(168,85,247,0.10)" : "transparent",
+                opacity: readOnly ? 0.5 : 1,
+              }}
+            >
+              {c.icon(on ? palette.purpleSoft : palette.textMid)}
+              <Text className="text-sub font-medium" style={{ color: on ? palette.purpleSoft : palette.textMid }}>
+                {c.label}
+              </Text>
+            </Pressable>
+          );
+        })}
+      </View>
+    </View>
+  );
+}
+
+/**
+ * Best-effort reshape of an item's `data` when its type changes, so switching
+ * kind doesn't silently drop the user's content. Text is carried across:
+ * a card's description ⇆ checklist entries ⇆ document paragraphs.
+ */
+function convertItemData(item: Item, to: ItemType): Record<string, unknown> {
+  const lines = itemTextLines(item);
+  if (to === "card") return { description: lines.join("\n") };
+  if (to === "checklist") return { entries: lines.filter(Boolean).map((text) => ({ text, done: false })) };
+  return { blocks: (lines.length ? lines : [""]).map((text) => ({ type: "paragraph", text })) };
+}
+
+/** Flatten any item variant's textual content into plain lines. */
+function itemTextLines(item: Item): string[] {
+  if (item.type === "card") {
+    const d = (item.data as { description?: string })?.description ?? "";
+    return d ? d.split("\n") : [];
+  }
+  if (item.type === "checklist") {
+    return ((item.data as ChecklistData)?.entries ?? []).map((e) => e.text).filter(Boolean);
+  }
+  return ((item.data as DocumentData)?.blocks ?? []).map((b) => b.text ?? "").filter(Boolean);
+}
+
+// --------------------------------------------------------------------------- //
 /** Inline 3-state (+none) priority selector. Persists on tap. */
 function PriorityPicker({
   value,
@@ -235,29 +336,67 @@ function PriorityPicker({
     <View className="mt-4">
       <Text className="mb-2 text-meta uppercase text-text-low">Priority</Text>
       <View className="flex-row gap-2">
-        {PRIORITIES.map((p) => {
-          const on = p.value === value;
-          return (
-            <Pressable
-              key={p.value}
-              disabled={readOnly}
-              onPress={() => onChange(p.value)}
-              className="flex-row items-center gap-1.5 rounded-md border px-3 py-2"
-              style={{
-                borderColor: on ? p.color : palette.border,
-                backgroundColor: on ? `${p.color}1f` : "transparent",
-                opacity: readOnly ? 0.5 : 1,
-              }}
-            >
-              {p.value > 0 ? <FlagIcon size={13} color={on ? p.color : palette.textLow} /> : null}
-              <Text className="text-sub font-medium" style={{ color: on ? p.color : palette.textMid }}>
-                {p.label}
-              </Text>
-            </Pressable>
-          );
-        })}
+        {PRIORITIES.map((p) => (
+          <PriorityChip
+            key={p.value}
+            color={p.color}
+            label={p.label}
+            flag={p.value > 0}
+            selected={p.value === value}
+            disabled={readOnly}
+            onPress={() => onChange(p.value)}
+          />
+        ))}
       </View>
     </View>
+  );
+}
+
+/** One priority option — springs up with a crisp scale pop + color shift the
+ *  instant it's chosen (ui-ux-motion skill §2: priority-adjustment delight). */
+function PriorityChip({
+  color,
+  label,
+  flag,
+  selected,
+  disabled,
+  onPress,
+}: {
+  color: string;
+  label: string;
+  flag: boolean;
+  selected: boolean;
+  disabled: boolean;
+  onPress: () => void;
+}) {
+  const wasSelected = useRef(selected);
+  const pop = useSharedValue(0);
+
+  useEffect(() => {
+    if (selected && !wasSelected.current) {
+      pop.value = withSequence(withSpring(1, { damping: 6, stiffness: 260 }), withSpring(0));
+    }
+    wasSelected.current = selected;
+  }, [selected, pop]);
+
+  const style = useAnimatedStyle(() => ({
+    transform: [{ scale: 1 + pop.value * 0.12 }],
+    borderColor: withTiming(selected ? color : palette.border, { duration: 180 }),
+    backgroundColor: withTiming(selected ? `${color}1f` : "transparent", { duration: 180 }),
+  }));
+
+  return (
+    <Pressable disabled={disabled} onPress={onPress} style={{ opacity: disabled ? 0.5 : 1 }}>
+      <Animated.View
+        style={style}
+        className="flex-row items-center gap-1.5 rounded-md border px-3 py-2"
+      >
+        {flag ? <FlagIcon size={13} color={selected ? color : palette.textLow} /> : null}
+        <Text className="text-sub font-medium" style={{ color: selected ? color : palette.textMid }}>
+          {label}
+        </Text>
+      </Animated.View>
+    </Pressable>
   );
 }
 

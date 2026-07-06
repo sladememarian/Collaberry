@@ -14,7 +14,7 @@ import { ApiError } from "@/api/client";
 import { workspaceApi } from "@/api/endpoints";
 import { AppContainer } from "@/components/AppContainer";
 import { ArrowLeftIcon, ChecklistIcon, DocumentIcon, KanbanIcon } from "@/components/icons";
-import { KanbanBoard } from "@/components/kanban/KanbanBoard";
+import { DraggableBoard } from "@/components/kanban/DraggableBoard";
 import type { ColumnLocks } from "@/components/kanban/KanbanColumn";
 import { AvatarStack } from "@/components/ui/Avatar";
 import { Button } from "@/components/ui/Button";
@@ -108,11 +108,35 @@ export default function BoardScreen() {
   // --- create card sheet -------------------------------------------------- //
   const [sheetColumn, setSheetColumn] = useState<Column | null>(null);
   const openAdd = useCallback((column: Column) => setSheetColumn(column), []);
+  const [addColumnOpen, setAddColumnOpen] = useState(false);
 
   const onCardPress = useCallback(
     (item: Item) =>
       router.push({ pathname: "/(app)/item/[id]", params: { id: item.id, boardId } }),
     [router, boardId],
+  );
+
+  // Optimistically move a card to another lane, then persist (workspace-service
+  // echoes a card.moved event, which reconciles into the same state).
+  const moveCard = useCallback(
+    (itemId: string, toColumnId: string) => {
+      setItems((prev) => prev.map((p) => (p.id === itemId ? { ...p, column_id: toColumnId } : p)));
+      workspaceApi.updateItem(itemId, { column_id: toColumnId }).catch(() => load());
+    },
+    [load],
+  );
+
+  // Optimistically reorder lanes, then persist; on failure re-fetch the board.
+  const reorderColumns = useCallback(
+    (orderedIds: string[]) => {
+      setBoard((prev) =>
+        prev
+          ? { ...prev, columns: prev.columns.map((c) => ({ ...c, order: orderedIds.indexOf(c.id) })) }
+          : prev,
+      );
+      workspaceApi.reorderColumns(boardId, orderedIds).then(setBoard).catch(() => load());
+    },
+    [boardId, load],
   );
 
   if (loading) {
@@ -152,13 +176,16 @@ export default function BoardScreen() {
           onCta={() => setSheetColumn(board.columns[0] ?? null)}
         />
       ) : (
-        <KanbanBoard
+        <DraggableBoard
           board={board}
           items={items}
           workspaceContext={context}
           locks={cardLocks}
           onCardPress={onCardPress}
           onAddCard={openAdd}
+          onAddColumn={() => setAddColumnOpen(true)}
+          onMoveCard={moveCard}
+          onReorderColumns={reorderColumns}
         />
       )}
 
@@ -169,6 +196,16 @@ export default function BoardScreen() {
         onCreated={(item) => {
           setItems((prev) => (prev.some((p) => p.id === item.id) ? prev : [...prev, item]));
           setSheetColumn(null);
+        }}
+      />
+
+      <AddColumnSheet
+        boardId={boardId}
+        open={addColumnOpen}
+        onClose={() => setAddColumnOpen(false)}
+        onAdded={(updated) => {
+          setBoard(updated);
+          setAddColumnOpen(false);
         }}
       />
     </AppContainer>
@@ -292,6 +329,59 @@ function AddItemSheet({
           </View>
         </View>
         <Button label="Add" onPress={submit} loading={busy} full />
+      </View>
+    </Sheet>
+  );
+}
+
+// --------------------------------------------------------------------------- //
+function AddColumnSheet({
+  boardId,
+  open,
+  onClose,
+  onAdded,
+}: {
+  boardId: string;
+  open: boolean;
+  onClose: () => void;
+  onAdded: (board: Board) => void;
+}) {
+  const [name, setName] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (open) {
+      setName("");
+      setError(null);
+    }
+  }, [open]);
+
+  const submit = async () => {
+    if (!name.trim()) return setError("Name the lane.");
+    setBusy(true);
+    setError(null);
+    try {
+      const board = await workspaceApi.addColumn(boardId, name.trim());
+      onAdded(board);
+    } catch (e) {
+      setError(e instanceof ApiError ? e.message : "Couldn't add the lane.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <Sheet open={open} onClose={onClose} title="Add a lane">
+      <View className="gap-4">
+        <TextField
+          label="Lane name"
+          value={name}
+          onChangeText={setName}
+          placeholder="e.g. Code review, Blocked"
+          error={error}
+        />
+        <Button label="Add lane" onPress={submit} loading={busy} full />
       </View>
     </Sheet>
   );

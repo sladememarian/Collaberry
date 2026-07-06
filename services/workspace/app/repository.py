@@ -27,6 +27,11 @@ class NotFound(Exception):
     """Raised when a document is absent *or* the caller may not see it."""
 
 
+class ConflictError(Exception):
+    """Raised when a request is valid but conflicts with current state (e.g.
+    deleting a lane that still holds cards). Surfaced by routes as a 409."""
+
+
 def _oid(value: str) -> ObjectId:
     try:
         return ObjectId(value)
@@ -123,6 +128,58 @@ class WorkspaceRepository:
         await self._assert_member(board["workspace_id"], user_id)
         return oid_to_str(board)  # type: ignore[return-value]
 
+    async def add_column(self, board_id: str, user_id: str, name: str) -> dict:
+        """Append a new lane to a board (e.g. 'Code review'). Order is one past
+        the current max so it lands on the right of the existing lanes."""
+        board = await self.get_board(board_id, user_id)
+        next_order = max((c["order"] for c in board["columns"]), default=-1) + 1
+        column = Column(id=uuid.uuid4().hex[:8], name=name, order=next_order).model_dump()
+        await self._boards.update_one(
+            {"_id": _oid(board_id)}, {"$push": {"columns": column}}
+        )
+        return await self.get_board(board_id, user_id)
+
+    async def reorder_columns(self, board_id: str, user_id: str, ordered_ids: list[str]) -> dict:
+        """Rewrite lane order from a full list of column ids (drag-to-reorder).
+        The list must be a permutation of the board's current columns — any
+        mismatch is rejected so a stale client can't drop or duplicate a lane."""
+        board = await self.get_board(board_id, user_id)
+        current = {c["id"] for c in board["columns"]}
+        if set(ordered_ids) != current or len(ordered_ids) != len(board["columns"]):
+            raise ConflictError("column order must list every lane exactly once")
+        by_id = {c["id"]: c for c in board["columns"]}
+        new_columns = [{**by_id[cid], "order": i} for i, cid in enumerate(ordered_ids)]
+        await self._boards.update_one(
+            {"_id": _oid(board_id)}, {"$set": {"columns": new_columns}}
+        )
+        return await self.get_board(board_id, user_id)
+
+    async def rename_column(self, board_id: str, user_id: str, column_id: str, name: str) -> dict:
+        board = await self.get_board(board_id, user_id)
+        if not any(c["id"] == column_id for c in board["columns"]):
+            raise NotFound(f"column {column_id}")
+        await self._boards.update_one(
+            {"_id": _oid(board_id), "columns.id": column_id},
+            {"$set": {"columns.$.name": name}},
+        )
+        return await self.get_board(board_id, user_id)
+
+    async def delete_column(self, board_id: str, user_id: str, column_id: str) -> dict:
+        """Remove a lane. Refuses the last remaining lane (a board needs one) and
+        refuses a non-empty lane so cards are never silently orphaned."""
+        board = await self.get_board(board_id, user_id)
+        if not any(c["id"] == column_id for c in board["columns"]):
+            raise NotFound(f"column {column_id}")
+        if len(board["columns"]) <= 1:
+            raise ConflictError("a board must keep at least one column")
+        count = await self._items.count_documents({"board_id": board_id, "column_id": column_id})
+        if count:
+            raise ConflictError("move or delete this column's cards first")
+        await self._boards.update_one(
+            {"_id": _oid(board_id)}, {"$pull": {"columns": {"id": column_id}}}
+        )
+        return await self.get_board(board_id, user_id)
+
     # ---- items -----------------------------------------------------------
     async def _next_order(self, board_id: str, column_id: str) -> float:
         last = await self._items.find_one(
@@ -172,6 +229,8 @@ class WorkspaceRepository:
 
         if patch.title is not None:
             changes["title"] = patch.title
+        if patch.type is not None:
+            changes["type"] = patch.type.value if hasattr(patch.type, "value") else patch.type
         if patch.data is not None:
             changes["data"] = patch.data
         if patch.assignees is not None:

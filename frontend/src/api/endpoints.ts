@@ -62,6 +62,29 @@ export const workspaceApi = {
 
   getBoard: (boardId: string) => request<Board>(`/api/v1/workspace/boards/${boardId}`),
 
+  addColumn: (boardId: string, name: string) =>
+    request<Board>(`/api/v1/workspace/boards/${boardId}/columns`, {
+      method: "POST",
+      body: { name },
+    }),
+
+  renameColumn: (boardId: string, columnId: string, name: string) =>
+    request<Board>(`/api/v1/workspace/boards/${boardId}/columns/${columnId}`, {
+      method: "PATCH",
+      body: { name },
+    }),
+
+  reorderColumns: (boardId: string, order: string[]) =>
+    request<Board>(`/api/v1/workspace/boards/${boardId}/columns/order`, {
+      method: "PUT",
+      body: { order },
+    }),
+
+  deleteColumn: (boardId: string, columnId: string) =>
+    request<Board>(`/api/v1/workspace/boards/${boardId}/columns/${columnId}`, {
+      method: "DELETE",
+    }),
+
   listItems: (boardId: string) =>
     request<Item[]>(`/api/v1/workspace/boards/${boardId}/items`),
 
@@ -87,6 +110,7 @@ export const workspaceApi = {
     itemId: string,
     patch: Partial<{
       title: string;
+      type: ItemType;
       column_id: string;
       order: number;
       data: Record<string, unknown>;

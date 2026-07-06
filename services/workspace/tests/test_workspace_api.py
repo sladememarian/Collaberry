@@ -177,3 +177,83 @@ async def test_bad_column_rejected(ctx):
         json={"type": "card", "title": "X", "column_id": "does-not-exist"},
     )
     assert r.status_code == 404
+
+
+async def test_add_rename_and_delete_column(ctx):
+    alice = ctx.user("alice")
+    _, board = await _make_board(alice)
+
+    # Add a new lane; it lands to the right of the defaults.
+    added = (await alice.post(
+        f"/api/v1/workspace/boards/{board['id']}/columns", json={"name": "Code review"}
+    )).json()
+    assert [c["name"] for c in added["columns"]] == ["To do", "In progress", "Done", "Code review"]
+    new_col = added["columns"][-1]
+    assert new_col["order"] == 3
+
+    # Rename it.
+    renamed = (await alice.patch(
+        f"/api/v1/workspace/boards/{board['id']}/columns/{new_col['id']}",
+        json={"name": "Review"},
+    )).json()
+    assert any(c["name"] == "Review" for c in renamed["columns"])
+
+    # Delete it (it's empty, so this is allowed).
+    deleted = (await alice.delete(
+        f"/api/v1/workspace/boards/{board['id']}/columns/{new_col['id']}"
+    )).json()
+    assert all(c["id"] != new_col["id"] for c in deleted["columns"])
+
+
+async def test_reorder_columns(ctx):
+    alice = ctx.user("alice")
+    _, board = await _make_board(alice)
+    ids = [c["id"] for c in board["columns"]]  # To do, In progress, Done
+
+    # Move "Done" to the front.
+    new_order = [ids[2], ids[0], ids[1]]
+    reordered = (await alice.put(
+        f"/api/v1/workspace/boards/{board['id']}/columns/order",
+        json={"order": new_order},
+    )).json()
+    got = [c["id"] for c in sorted(reordered["columns"], key=lambda c: c["order"])]
+    assert got == new_order
+
+    # A partial/garbled order is refused so lanes can't be dropped or duplicated.
+    bad = await alice.put(
+        f"/api/v1/workspace/boards/{board['id']}/columns/order",
+        json={"order": [ids[0]]},
+    )
+    assert bad.status_code == 409
+
+
+async def test_delete_non_empty_column_is_rejected(ctx):
+    alice = ctx.user("alice")
+    _, board = await _make_board(alice)
+    todo = board["columns"][0]["id"]
+    await alice.post(
+        f"/api/v1/workspace/boards/{board['id']}/items",
+        json={"type": "card", "title": "stuck here", "column_id": todo},
+    )
+    # The lane still holds a card, so deletion is a 409 — cards are never orphaned.
+    r = await alice.delete(f"/api/v1/workspace/boards/{board['id']}/columns/{todo}")
+    assert r.status_code == 409
+
+
+async def test_switch_item_type_card_to_checklist(ctx):
+    alice = ctx.user("alice")
+    _, board = await _make_board(alice)
+    todo = board["columns"][0]["id"]
+    card = (await alice.post(
+        f"/api/v1/workspace/boards/{board['id']}/items",
+        json={"type": "card", "title": "morphs", "column_id": todo, "data": {"description": "d"}},
+    )).json()
+
+    switched = (await alice.patch(
+        f"/api/v1/workspace/items/{card['id']}",
+        json={"type": "checklist", "data": {"entries": [{"text": "step one"}]}},
+    )).json()
+    assert switched["type"] == "checklist"
+    assert switched["data"]["entries"][0] == {"text": "step one", "done": False}
+    assert switched["title"] == "morphs"  # untouched
+

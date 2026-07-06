@@ -24,6 +24,9 @@ from collaberry_common.events import (
     publish_notify_event,
 )
 from collaberry_common.models import (
+    BoardColumnCreate,
+    BoardColumnReorder,
+    BoardColumnUpdate,
     BoardCreate,
     BoardPublic,
     ItemCreate,
@@ -38,7 +41,7 @@ from collaberry_common.redis_client import make_redis
 from collaberry_common.security import TokenClaims, load_public_key
 from collaberry_common.settings import get_settings
 
-from .repository import NotFound, WorkspaceRepository
+from .repository import ConflictError, NotFound, WorkspaceRepository
 
 
 @asynccontextmanager
@@ -163,6 +166,84 @@ async def get_board(board_id: str, request: Request, claims: TokenClaims = Depen
         return _to_board(await repo(request).get_board(board_id, claims.user_id))
     except NotFound:
         raise HTTPException(status_code=404, detail="Board not found")
+
+
+@app.post(
+    "/api/v1/workspace/boards/{board_id}/columns",
+    response_model=BoardPublic,
+    status_code=201,
+    tags=["boards"],
+)
+async def add_column(
+    board_id: str,
+    body: BoardColumnCreate,
+    request: Request,
+    claims: TokenClaims = Depends(current_user),
+):
+    try:
+        board = await repo(request).add_column(board_id, claims.user_id, body.name)
+    except NotFound:
+        raise HTTPException(status_code=404, detail="Board not found")
+    return _to_board(board)
+
+
+@app.put(
+    "/api/v1/workspace/boards/{board_id}/columns/order",
+    response_model=BoardPublic,
+    tags=["boards"],
+)
+async def reorder_columns(
+    board_id: str,
+    body: BoardColumnReorder,
+    request: Request,
+    claims: TokenClaims = Depends(current_user),
+):
+    try:
+        board = await repo(request).reorder_columns(board_id, claims.user_id, body.order)
+    except NotFound:
+        raise HTTPException(status_code=404, detail="Board not found")
+    except ConflictError as exc:
+        raise HTTPException(status_code=409, detail=str(exc))
+    return _to_board(board)
+
+
+@app.patch(
+    "/api/v1/workspace/boards/{board_id}/columns/{column_id}",
+    response_model=BoardPublic,
+    tags=["boards"],
+)
+async def rename_column(
+    board_id: str,
+    column_id: str,
+    body: BoardColumnUpdate,
+    request: Request,
+    claims: TokenClaims = Depends(current_user),
+):
+    try:
+        board = await repo(request).rename_column(board_id, claims.user_id, column_id, body.name)
+    except NotFound as exc:
+        raise HTTPException(status_code=404, detail=str(exc) or "Board not found")
+    return _to_board(board)
+
+
+@app.delete(
+    "/api/v1/workspace/boards/{board_id}/columns/{column_id}",
+    response_model=BoardPublic,
+    tags=["boards"],
+)
+async def delete_column(
+    board_id: str,
+    column_id: str,
+    request: Request,
+    claims: TokenClaims = Depends(current_user),
+):
+    try:
+        board = await repo(request).delete_column(board_id, claims.user_id, column_id)
+    except NotFound as exc:
+        raise HTTPException(status_code=404, detail=str(exc) or "Board not found")
+    except ConflictError as exc:
+        raise HTTPException(status_code=409, detail=str(exc))
+    return _to_board(board)
 
 
 # --------------------------------------------------------------------------- #
