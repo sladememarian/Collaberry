@@ -311,7 +311,12 @@ function DraggableColumn({
   const laneDragStyle = useAnimatedStyle(() => ({
     transform: [{ translateX: laneX.value }, { scale: 1 + laneLift.value * 0.02 }],
     zIndex: laneLift.value > 0 ? 40 : 0,
-    boxShadow: laneLift.value > 0 ? `0px ${laneLift.value * 8}px ${laneLift.value * 24}px rgba(0,0,0,${laneLift.value * 0.4})` : undefined,
+    // Always a real boxShadow string (never undefined) — reanimated's web
+    // style updater passes this straight to a parser that only special-cases
+    // the string "none", not undefined/null, and throws otherwise. At rest
+    // (lift 0) this just fades the shadow's alpha to 0, which reads the same
+    // as no shadow.
+    boxShadow: `0px ${laneLift.value * 8}px ${laneLift.value * 24}px rgba(0,0,0,${laneLift.value * 0.4})`,
     opacity: 1 - laneLift.value * 0.08,
   }));
 
@@ -493,8 +498,11 @@ function DraggableCard({
     ],
     zIndex: lifted.value > 0 ? 50 : 0,
     // "boxShadow" (not the deprecated "shadow*" props) — one string, works on
-    // both react-native-web and native RN 0.76+.
-    boxShadow: lifted.value > 0 ? `0px ${lifted.value * 10}px ${lifted.value * 18}px rgba(0,0,0,${lifted.value * 0.45})` : undefined,
+    // both react-native-web and native RN 0.76+. Always a real string (never
+    // undefined): reanimated's web style updater feeds this straight to a
+    // parser that only special-cases the literal "none", and throws on
+    // undefined/null. At rest (lifted 0) the shadow's alpha just fades to 0.
+    boxShadow: `0px ${lifted.value * 10}px ${lifted.value * 18}px rgba(0,0,0,${lifted.value * 0.45})`,
     opacity: 1 - lifted.value * 0.05,
   }));
 
