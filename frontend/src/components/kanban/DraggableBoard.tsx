@@ -373,7 +373,12 @@ function DraggableColumn({
             overflow: "hidden",
             borderWidth: 1,
             borderRadius: 14,
-            backgroundColor: "rgba(18,18,22,0.72)",
+            // Near-opaque raised surface (lighter than the #0A0A0C void) so the
+            // lane reads as a solid panel and cards never look like they float
+            // on the dotted ambient — on sparse boards the old 0.72 tint let the
+            // background bleed through the empty space and read as "darkness".
+            // The ambient still breathes through the gutters and page margins.
+            backgroundColor: "rgba(20,20,26,0.9)",
           },
           targetStyle, // supplies the (animated) borderColor
           isDropTarget ? glow(palette.purple, 16) : null,
@@ -548,36 +553,43 @@ function DraggableCard({
     [beginDrag, endDrag, commitMove, onHoverColumn, resolveColumn, tx, ty, lifted],
   );
 
-  const style = useAnimatedStyle(() => ({
-    transform: [
-      { translateX: tx.value },
-      { translateY: ty.value },
-      { scale: 1 + lifted.value * 0.04 },
-    ],
+  // PERF: two separate animated styles. `moveStyle` changes on *every* pointer
+  // move (tx/ty) but is cheap — just a transform + zIndex. `liftStyle` carries
+  // the expensive part (a boxShadow string that reanimated-web must re-parse on
+  // each recompute) but depends only on `lifted`, which is constant during the
+  // drag itself (it springs once on grab, once on release). Keeping them apart
+  // means the shadow string is NOT rebuilt+reparsed on every move — the main
+  // cause of drag jank on web, where reanimated runs on the JS thread.
+  const moveStyle = useAnimatedStyle(() => ({
+    transform: [{ translateX: tx.value }, { translateY: ty.value }],
     zIndex: lifted.value > 0 ? 50 : 0,
-    // "boxShadow" (not the deprecated "shadow*" props) — one string, works on
-    // both react-native-web and native RN 0.76+. Always a real string (never
-    // undefined): reanimated's web style updater feeds this straight to a
-    // parser that only special-cases the literal "none", and throws on
-    // undefined/null. At rest (lifted 0) the shadow's alpha just fades to 0.
+  }));
+
+  const liftStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: 1 + lifted.value * 0.04 }],
+    // Always a real string (never undefined) — reanimated's web updater feeds
+    // this to a parser that only special-cases "none" and throws on nullish.
+    // At rest (lifted 0) the alpha just fades to 0, same as no shadow.
     boxShadow: `0px ${lifted.value * 10}px ${lifted.value * 18}px rgba(0,0,0,${lifted.value * 0.45})`,
     opacity: 1 - lifted.value * 0.05,
   }));
 
   return (
     <GestureDetector gesture={pan}>
-      <Animated.View style={style} layout={LinearTransition.springify().damping(20)}>
-        <TaskCard
-          item={item}
-          workspaceContext={workspaceContext}
-          lockedByName={lockedByName}
-          onPress={dragging ? undefined : onPress}
-        />
-        {/* Quick, guaranteed cross-lane move (works without dragging). */}
-        <View className="mt-[-6px] mb-1.5 flex-row justify-end gap-1 px-1">
-          <CardNudge disabled={!prevColumnId} rotate onPress={() => prevColumnId && onMoveCard(item.id, prevColumnId)} />
-          <CardNudge disabled={!nextColumnId} onPress={() => nextColumnId && onMoveCard(item.id, nextColumnId)} />
-        </View>
+      <Animated.View style={moveStyle} layout={LinearTransition.springify().damping(20)}>
+        <Animated.View style={liftStyle}>
+          <TaskCard
+            item={item}
+            workspaceContext={workspaceContext}
+            lockedByName={lockedByName}
+            onPress={dragging ? undefined : onPress}
+          />
+          {/* Quick, guaranteed cross-lane move (works without dragging). */}
+          <View className="mt-[-6px] mb-1.5 flex-row justify-end gap-1 px-1">
+            <CardNudge disabled={!prevColumnId} rotate onPress={() => prevColumnId && onMoveCard(item.id, prevColumnId)} />
+            <CardNudge disabled={!nextColumnId} onPress={() => nextColumnId && onMoveCard(item.id, nextColumnId)} />
+          </View>
+        </Animated.View>
       </Animated.View>
     </GestureDetector>
   );

@@ -139,13 +139,29 @@ function CursorGlow() {
 
   useEffect(() => {
     if (Platform.OS !== "web" || typeof window === "undefined") return;
+    // Coalesce the high-frequency mousemove stream down to one spring retarget
+    // per animation frame. On web reanimated runs on the JS thread, so updating
+    // a spring on every raw mousemove competes with drag gestures and causes
+    // jank; a single rAF-batched update per frame is smooth and far cheaper.
+    let raf = 0;
+    let lastX = anchorX;
+    let lastY = anchorY;
+    const flush = () => {
+      raf = 0;
+      x.value = withSpring(lastX, { damping: 26, stiffness: 80 });
+      y.value = withSpring(lastY, { damping: 26, stiffness: 80 });
+    };
     const onMove = (e: MouseEvent) => {
       if (!isActive.current) return;
-      x.value = withSpring(e.clientX, { damping: 22, stiffness: 90 });
-      y.value = withSpring(e.clientY, { damping: 22, stiffness: 90 });
+      lastX = e.clientX;
+      lastY = e.clientY;
+      if (!raf) raf = requestAnimationFrame(flush);
     };
     window.addEventListener("mousemove", onMove, { passive: true });
-    return () => window.removeEventListener("mousemove", onMove);
+    return () => {
+      window.removeEventListener("mousemove", onMove);
+      if (raf) cancelAnimationFrame(raf);
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
