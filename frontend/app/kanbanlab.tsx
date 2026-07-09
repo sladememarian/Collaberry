@@ -14,6 +14,7 @@ import { palette } from "@/theme/tokens";
 
 import { AppContainer } from "@/components/AppContainer";
 import { DraggableBoard } from "@/components/kanban/DraggableBoard";
+import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import type { Board, Column, Item } from "@/types";
 
 const COLUMN_NAMES = ["Backlog", "In progress", "Code review", "Blocked", "Done"];
@@ -70,6 +71,7 @@ export default function KanbanLab() {
   }));
   const [items, setItems] = useState<Item[]>(() => mockItems(initialColumns));
   const [sortOrder, setSortOrder] = useState<"created" | "priority" | "estimation">("created");
+  const [deleteTarget, setDeleteTarget] = useState<Column | null>(null);
 
   if (!__DEV__) {
     return (
@@ -89,6 +91,11 @@ export default function KanbanLab() {
       ...prev,
       columns: prev.columns.map((c) => ({ ...c, order: orderedIds.indexOf(c.id) })),
     }));
+
+  const deleteColumn = (columnId: string) => {
+    setBoard((prev) => ({ ...prev, columns: prev.columns.filter((c) => c.id !== columnId) }));
+    setItems((prev) => prev.filter((it) => it.column_id !== columnId));
+  };
 
   return (
     <AppContainer>
@@ -131,7 +138,21 @@ export default function KanbanLab() {
         onAddColumn={() => {}}
         onMoveCard={moveCard}
         onReorderColumns={reorderColumns}
+        onDeleteColumn={setDeleteTarget}
         sortOrder={sortOrder}
+      />
+
+      <ConfirmDialog
+        open={deleteTarget !== null}
+        title={deleteTarget ? `Delete "${deleteTarget.name}"?` : "Delete this lane?"}
+        message="This can't be undone."
+        confirmLabel="Delete"
+        destructive
+        onCancel={() => setDeleteTarget(null)}
+        onConfirm={() => {
+          if (deleteTarget) deleteColumn(deleteTarget.id);
+          setDeleteTarget(null);
+        }}
       />
     </AppContainer>
   );
