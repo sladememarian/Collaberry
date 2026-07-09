@@ -30,7 +30,7 @@ export default function BoardScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const boardId = String(id);
   const router = useRouter();
-  const { token, user } = useAuth();
+  const { token, user, booting } = useAuth();
 
   const [board, setBoard] = useState<Board | null>(null);
   const [items, setItems] = useState<Item[]>([]);
@@ -103,8 +103,12 @@ export default function BoardScreen() {
   }, [boardId]);
 
   useEffect(() => {
+    // The auth token is rehydrated from storage asynchronously on app boot;
+    // firing this before it lands races the client into sending requests
+    // with no JWT yet, which the user sees as a false "Jwt is missing" error.
+    if (booting) return;
     load();
-  }, [load]);
+  }, [load, booting]);
 
   // --- create card sheet -------------------------------------------------- //
   const [sheetColumn, setSheetColumn] = useState<Column | null>(null);
