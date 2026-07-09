@@ -135,6 +135,27 @@ async def me(request: Request, claims: TokenClaims = Depends(current_user)) -> U
     )
 
 
+@app.get("/api/v1/auth/users/by-ids", response_model=list[UserPublic], tags=["auth"])
+async def users_by_ids(
+    ids: str, request: Request, claims: TokenClaims = Depends(current_user)
+) -> list[UserPublic]:
+    """Resolve a batch of user ids to public profiles.
+
+    Workspace membership is stored by opaque ``user_id``, but a UI that lets you
+    assign a task to a teammate needs their display name, not their id. ``ids``
+    is a comma-separated list; unknown or malformed ids are dropped rather than
+    erroring the whole request.
+    """
+    wanted = [i for i in (ids.split(",") if ids else []) if i]
+    users = await repo(request).get_by_ids(wanted)
+    return [
+        UserPublic(
+            id=u["id"], email=u["email"], display_name=u["display_name"], created_at=u["created_at"]
+        )
+        for u in users
+    ]
+
+
 @app.get("/api/v1/auth/users/by-email", response_model=UserPublic, tags=["auth"])
 async def user_by_email(
     email: str, request: Request, claims: TokenClaims = Depends(current_user)

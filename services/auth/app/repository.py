@@ -32,6 +32,26 @@ class UserRepository:
             return None
         return oid_to_str(await self._users.find_one({"_id": oid}))
 
+    async def get_by_ids(self, user_ids: list[str]) -> list[dict]:
+        """Resolve many ids at once (used to label assignees by display name).
+
+        Invalid ids (not a valid ``ObjectId``) are silently skipped rather than
+        raising — the caller passes ids it already trusts came from membership
+        records, and a stray bad one shouldn't fail the whole lookup.
+        """
+        from bson import ObjectId
+
+        oids = []
+        for uid in user_ids:
+            try:
+                oids.append(ObjectId(uid))
+            except Exception:
+                continue
+        if not oids:
+            return []
+        docs = await self._users.find({"_id": {"$in": oids}}).to_list(length=None)
+        return [oid_to_str(d) for d in docs]
+
     async def create(self, *, email: str, password: str, display_name: str) -> dict:
         doc = {
             "email": email.lower(),

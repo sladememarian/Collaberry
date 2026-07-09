@@ -86,6 +86,33 @@ async def test_user_lookup_requires_a_token(client):
     assert anon.status_code == 401
 
 
+async def test_users_by_ids_resolves_batch_and_skips_bad_ids(client):
+    ada = await client.post("/api/v1/auth/register", json=CREDS)
+    ada_id = ada.json()["user"]["id"]
+    token = ada.json()["access_token"]
+    headers = {"Authorization": f"Bearer {token}"}
+
+    grace = await client.post(
+        "/api/v1/auth/register",
+        json={"email": "grace@collaberry.dev", "password": "compiler-1952", "display_name": "Grace"},
+    )
+    grace_id = grace.json()["user"]["id"]
+
+    r = await client.get(
+        "/api/v1/auth/users/by-ids",
+        params={"ids": f"{ada_id},{grace_id},not-a-real-id"},
+        headers=headers,
+    )
+    assert r.status_code == 200, r.text
+    names = {u["display_name"] for u in r.json()}
+    assert names == {"Ada", "Grace"}
+
+
+async def test_users_by_ids_requires_a_token(client):
+    anon = await client.get("/api/v1/auth/users/by-ids", params={"ids": "x"})
+    assert anon.status_code == 401
+
+
 @pytest.mark.parametrize("bad", [
     {"email": "not-an-email", "password": "longenough", "display_name": "x"},
     {"email": "a@b.com", "password": "short", "display_name": "x"},
