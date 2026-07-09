@@ -8,7 +8,9 @@
  * so it can never ship as a reachable screen.
  */
 import React, { useMemo, useState } from "react";
-import { Text, View } from "react-native";
+import { Pressable, Text, View } from "react-native";
+
+import { palette } from "@/theme/tokens";
 
 import { AppContainer } from "@/components/AppContainer";
 import { DraggableBoard } from "@/components/kanban/DraggableBoard";
@@ -22,6 +24,12 @@ const CARD_COUNTS = [14, 6, 3, 0, 1];
 function mockColumns(): Column[] {
   return COLUMN_NAMES.map((name, i) => ({ id: `col-${i}`, name, order: i }));
 }
+
+// "Code review" (index 2) is seeded with 3 cards whose priority/estimation are
+// deliberately non-monotonic relative to creation order, so each of the three
+// sort modes produces a distinct, assertable ordering — see kanban.spec.ts.
+const CODE_REVIEW_PRIORITY = [0, 2, 1];
+const CODE_REVIEW_ESTIMATION = [2, 1, 3];
 
 function mockItems(columns: Column[]): Item[] {
   const items: Item[] = [];
@@ -39,7 +47,10 @@ function mockItems(columns: Column[]): Item[] {
         assignees: [],
         tags: n % 3 === 0 ? ["work"] : [],
         due_date: null,
-        priority: n % 4,
+        estimation_time: ci === 2 ? CODE_REVIEW_ESTIMATION[n] : CARD_COUNTS[ci] - n,
+        start_date: null,
+        end_date: null,
+        priority: ci === 2 ? CODE_REVIEW_PRIORITY[n] : n % 4,
         created_by: "lab",
         updated_at: "2026-01-01T00:00:00Z",
       });
@@ -58,6 +69,7 @@ export default function KanbanLab() {
     created_at: "2026-01-01T00:00:00Z",
   }));
   const [items, setItems] = useState<Item[]>(() => mockItems(initialColumns));
+  const [sortOrder, setSortOrder] = useState<"created" | "priority" | "estimation">("created");
 
   if (!__DEV__) {
     return (
@@ -85,6 +97,30 @@ export default function KanbanLab() {
         <Text className="text-h2 font-bold text-text-hi">Kanban Lab</Text>
         <Text className="text-meta uppercase text-text-low">dev harness · mock data</Text>
       </View>
+      <View testID="sort-control" className="flex-row items-center gap-2 px-4 py-2">
+        <Text className="text-meta uppercase text-text-low">Sort</Text>
+        <View className="flex-row gap-1.5">
+          {(["created", "priority", "estimation"] as const).map((value) => {
+            const on = value === sortOrder;
+            return (
+              <Pressable
+                key={value}
+                testID={`sort-${value}`}
+                onPress={() => setSortOrder(value)}
+                className="rounded-md border px-2.5 py-1"
+                style={{
+                  borderColor: on ? palette.purple : palette.border,
+                  backgroundColor: on ? "rgba(168,85,247,0.10)" : "transparent",
+                }}
+              >
+                <Text className="text-meta font-medium" style={{ color: on ? palette.purpleSoft : palette.textMid }}>
+                  {value}
+                </Text>
+              </Pressable>
+            );
+          })}
+        </View>
+      </View>
       <DraggableBoard
         board={board}
         items={items}
@@ -95,6 +131,7 @@ export default function KanbanLab() {
         onAddColumn={() => {}}
         onMoveCard={moveCard}
         onReorderColumns={reorderColumns}
+        sortOrder={sortOrder}
       />
     </AppContainer>
   );

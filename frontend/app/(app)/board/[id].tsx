@@ -37,6 +37,7 @@ export default function BoardScreen() {
   const [context, setContext] = useState<WorkspaceContext>("personal");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [sortOrder, setSortOrder] = useState<"created" | "priority" | "estimation">("created");
 
   // Robust back: a board opened via a deep link (or after the item modal ate the
   // history entry) leaves router.back() with nothing to pop on web — it no-ops
@@ -167,6 +168,10 @@ export default function BoardScreen() {
         connected={socket.connected}
       />
 
+      {items.length > 0 ? (
+        <SortControl value={sortOrder} onChange={setSortOrder} />
+      ) : null}
+
       {items.length === 0 ? (
         <EmptyState
           icon={<KanbanIcon size={26} color={palette.textLow} />}
@@ -186,6 +191,7 @@ export default function BoardScreen() {
           onAddColumn={() => setAddColumnOpen(true)}
           onMoveCard={moveCard}
           onReorderColumns={reorderColumns}
+          sortOrder={sortOrder}
         />
       )}
 
@@ -236,6 +242,49 @@ function BoardHeader({
         <ConnectionDot connected={connected} />
       </View>
       {presence.length > 0 ? <AvatarStack people={presence} /> : null}
+    </View>
+  );
+}
+
+// --------------------------------------------------------------------------- //
+const SORT_OPTIONS: { value: "created" | "priority" | "estimation"; label: string }[] = [
+  { value: "created", label: "Created" },
+  { value: "priority", label: "Priority" },
+  { value: "estimation", label: "Estimation" },
+];
+
+/** Segmented control that picks how cards within each lane are ordered. */
+function SortControl({
+  value,
+  onChange,
+}: {
+  value: "created" | "priority" | "estimation";
+  onChange: (value: "created" | "priority" | "estimation") => void;
+}) {
+  return (
+    <View className="flex-row items-center gap-2 px-4 pb-2 pt-3">
+      <Text className="text-meta uppercase text-text-low">Sort</Text>
+      <View className="flex-row gap-1.5">
+        {SORT_OPTIONS.map((o) => {
+          const on = o.value === value;
+          return (
+            <Pressable
+              key={o.value}
+              onPress={() => onChange(o.value)}
+              accessibilityLabel={`Sort by ${o.label}`}
+              className="rounded-md border px-2.5 py-1"
+              style={{
+                borderColor: on ? palette.purple : palette.border,
+                backgroundColor: on ? "rgba(168,85,247,0.10)" : "transparent",
+              }}
+            >
+              <Text className="text-meta font-medium" style={{ color: on ? palette.purpleSoft : palette.textMid }}>
+                {o.label}
+              </Text>
+            </Pressable>
+          );
+        })}
+      </View>
     </View>
   );
 }

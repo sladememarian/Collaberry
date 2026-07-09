@@ -9,9 +9,8 @@
  *  · Drop snap       — on release the card springs into place (bouncy spring,
  *                       not a linear slide).
  *
- * Drag is the primary interaction; every move is also reachable through the
- * explicit ◀ ▶ controls on cards and lane headers, so the board stays fully
- * usable on any browser/input even if a pointer-drag misbehaves.
+ * Drag is the primary interaction: cards move between lanes by pointer drag,
+ * and lanes reorder by press-and-hold on their drag handle.
  */
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import Animated, {
@@ -24,7 +23,7 @@ import Animated, {
 import React, { useCallback, useMemo, useRef, useState } from "react";
 import { Pressable, ScrollView, Text, useWindowDimensions, View, type LayoutChangeEvent, type NativeSyntheticEvent, type NativeScrollEvent } from "react-native";
 
-import { ChevronRightIcon, DotGridIcon, PlusIcon } from "@/components/icons";
+import { DotGridIcon, PlusIcon } from "@/components/icons";
 import { glow, palette, type WorkspaceContext } from "@/theme/tokens";
 import type { Board, Column, Item } from "@/types";
 
@@ -164,18 +163,6 @@ export function DraggableBoard({
     [],
   );
 
-  const moveLane = useCallback(
-    (columnId: string, dir: -1 | 1) => {
-      const order = columns.map((c) => c.id);
-      const i = order.indexOf(columnId);
-      const j = i + dir;
-      if (i < 0 || j < 0 || j >= order.length) return;
-      [order[i], order[j]] = [order[j], order[i]];
-      onReorderColumns(order);
-    },
-    [columns, onReorderColumns],
-  );
-
   // Drag a lane by mouse/touch and drop it onto another lane's slot to swap it
   // into that position.
   const dropLaneOn = useCallback(
@@ -203,14 +190,10 @@ export function DraggableBoard({
       contentContainerStyle={{ paddingHorizontal: GUTTER, paddingTop: 4 }}
       className="flex-1"
     >
-      {columns.map((col, index) => (
+      {columns.map((col) => (
         <DraggableColumn
           key={col.id}
           column={col}
-          index={index}
-          count={columns.length}
-          prevColumnId={columns[index - 1]?.id ?? null}
-          nextColumnId={columns[index + 1]?.id ?? null}
           items={byColumn[col.id] ?? []}
           width={columnWidth}
           height={laneHeight}
@@ -220,7 +203,6 @@ export function DraggableBoard({
           isDragging={draggingLane === col.id}
           onCardPress={onCardPress}
           onAddCard={onAddCard}
-          onMoveLane={moveLane}
           onMoveCard={onMoveCard}
           onLaneFrame={setLaneFrame}
           onHoverColumn={setHoverColumn}
@@ -252,10 +234,6 @@ export function DraggableBoard({
 // --------------------------------------------------------------------------- //
 interface ColumnProps {
   column: Column;
-  index: number;
-  count: number;
-  prevColumnId: string | null;
-  nextColumnId: string | null;
   items: Item[];
   width: number;
   /** Explicit lane height (= the board viewport) so the inner list can scroll. */
@@ -266,7 +244,6 @@ interface ColumnProps {
   isDragging: boolean;
   onCardPress: (item: Item) => void;
   onAddCard: (column: Column) => void;
-  onMoveLane: (columnId: string, dir: -1 | 1) => void;
   onMoveCard: (itemId: string, toColumnId: string) => void;
   onLaneFrame: (id: string, x: number, w: number) => void;
   onHoverColumn: (id: string | null) => void;
@@ -277,10 +254,6 @@ interface ColumnProps {
 
 function DraggableColumn({
   column,
-  index,
-  count,
-  prevColumnId,
-  nextColumnId,
   items,
   width,
   height,
@@ -290,7 +263,6 @@ function DraggableColumn({
   isDragging,
   onCardPress,
   onAddCard,
-  onMoveLane,
   onMoveCard,
   onLaneFrame,
   onHoverColumn,
@@ -411,10 +383,7 @@ function DraggableColumn({
               <Text className="text-meta text-text-low">{items.length}</Text>
             </View>
           </View>
-          {/* Explicit lane reorder — always works, no matter the input. */}
           <View className="flex-row items-center gap-0.5">
-            <LaneNudge disabled={index === 0} rotate onPress={() => onMoveLane(column.id, -1)} />
-            <LaneNudge disabled={index === count - 1} onPress={() => onMoveLane(column.id, 1)} />
             <Pressable
               onPress={() => onAddCard(column)}
               hitSlop={8}
@@ -457,8 +426,6 @@ function DraggableColumn({
                 <DraggableCard
                   key={item.id}
                   item={item}
-                  prevColumnId={prevColumnId}
-                  nextColumnId={nextColumnId}
                   workspaceContext={workspaceContext}
                   lockedByName={locks[item.id]}
                   onPress={onCardPress}
@@ -475,28 +442,9 @@ function DraggableColumn({
   );
 }
 
-function LaneNudge({ onPress, disabled, rotate }: { onPress: () => void; disabled?: boolean; rotate?: boolean }) {
-  return (
-    <Pressable
-      onPress={disabled ? undefined : onPress}
-      disabled={disabled}
-      hitSlop={6}
-      className="h-7 w-6 items-center justify-center rounded-md"
-      style={{ opacity: disabled ? 0.25 : 1 }}
-      accessibilityLabel={rotate ? "Move lane left" : "Move lane right"}
-    >
-      <View style={{ transform: [{ rotate: rotate ? "180deg" : "0deg" }] }}>
-        <ChevronRightIcon size={16} color={palette.textMid} />
-      </View>
-    </Pressable>
-  );
-}
-
 // --------------------------------------------------------------------------- //
 interface CardProps {
   item: Item;
-  prevColumnId: string | null;
-  nextColumnId: string | null;
   workspaceContext: WorkspaceContext;
   lockedByName?: string | null;
   onPress: (item: Item) => void;
@@ -507,8 +455,6 @@ interface CardProps {
 
 function DraggableCard({
   item,
-  prevColumnId,
-  nextColumnId,
   workspaceContext,
   lockedByName,
   onPress,
