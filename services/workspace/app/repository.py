@@ -240,13 +240,15 @@ class WorkspaceRepository:
             changes["assignees"] = patch.assignees
         if patch.tags is not None:
             changes["tags"] = patch.tags
-        if patch.due_date is not None:
+        # These four are cleared with an explicit null, so "was it sent at all"
+        # (not "is it non-null") is what decides whether to touch the field.
+        if "due_date" in patch.model_fields_set:
             changes["due_date"] = patch.due_date
-        if patch.estimation_time is not None:
+        if "estimation_time" in patch.model_fields_set:
             changes["estimation_time"] = patch.estimation_time
-        if patch.start_date is not None:
+        if "start_date" in patch.model_fields_set:
             changes["start_date"] = patch.start_date
-        if patch.end_date is not None:
+        if "end_date" in patch.model_fields_set:
             changes["end_date"] = patch.end_date
         if patch.priority is not None:
             changes["priority"] = patch.priority
