@@ -3,6 +3,7 @@ import { request } from "./client";
 import type {
   AppNotification,
   Board,
+  Comment,
   Item,
   ItemType,
   TokenResponse,
@@ -136,6 +137,20 @@ export const workspaceApi = {
 
   deleteItem: (itemId: string) =>
     request<void>(`/api/v1/workspace/items/${itemId}`, { method: "DELETE" }),
+
+  listComments: (itemId: string) =>
+    request<Comment[]>(`/api/v1/workspace/items/${itemId}/comments`),
+
+  addComment: (itemId: string, body: string) =>
+    request<Comment>(`/api/v1/workspace/items/${itemId}/comments`, {
+      method: "POST",
+      body: { body },
+    }),
+
+  deleteComment: (itemId: string, commentId: string) =>
+    request<void>(`/api/v1/workspace/items/${itemId}/comments/${commentId}`, {
+      method: "DELETE",
+    }),
 };
 
 // --- presence-service (REST side; the socket is in realtime/) ------------- //

@@ -109,6 +109,14 @@ export interface Item {
 /** Alias used by the Kanban components to read like the spec. */
 export type TaskCard = Item;
 
+export interface Comment {
+  id: string;
+  item_id: string;
+  user_id: string;
+  body: string;
+  created_at: string;
+}
+
 export interface AppNotification {
   id: string;
   user_id: string;
