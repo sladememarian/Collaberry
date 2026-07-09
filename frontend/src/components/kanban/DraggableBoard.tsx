@@ -43,6 +43,8 @@ export interface DraggableBoardProps {
   onMoveCard: (itemId: string, toColumnId: string) => void;
   /** Persist a new left-to-right lane order (array of column ids). */
   onReorderColumns: (orderedIds: string[]) => void;
+  /** Sort order */
+  sortOrder?: 'created' | 'priority' | 'estimation';
 }
 
 const GUTTER = 16;
@@ -58,6 +60,7 @@ export function DraggableBoard({
   onAddColumn,
   onMoveCard,
   onReorderColumns,
+  sortOrder = 'created',
 }: DraggableBoardProps) {
   const { width: screenW, height: screenH } = useWindowDimensions();
 
@@ -93,9 +96,15 @@ export function DraggableBoard({
     const map: Record<string, Item[]> = {};
     for (const col of columns) map[col.id] = [];
     for (const it of items) (map[it.column_id] ??= []).push(it);
-    for (const id of Object.keys(map)) map[id].sort((a, b) => a.order - b.order);
+    for (const id of Object.keys(map)) {
+      map[id].sort((a, b) => {
+        if (sortOrder === 'priority') return b.priority - a.priority;
+        if (sortOrder === 'estimation') return (b.estimation_time ?? 0) - (a.estimation_time ?? 0);
+        return a.order - b.order;
+      });
+    }
     return map;
-  }, [columns, items]);
+  }, [columns, items, sortOrder]);
 
   // Content-space x-ranges of each lane (stable regardless of scroll position),
   // captured on layout, used to hit-test which lane a dragged card or lane is
