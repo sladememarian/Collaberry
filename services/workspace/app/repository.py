@@ -44,12 +44,14 @@ class WorkspaceRepository:
         self._ws = mongo.db["workspaces"]
         self._boards = mongo.db["boards"]
         self._items = mongo.db["items"]
+        self._comments = mongo.db["comments"]
 
     async def ensure_indexes(self) -> None:
         await self._ws.create_index("members.user_id")
         await self._boards.create_index("workspace_id")
         # The hot query is "give me a board's items, in order".
         await self._items.create_index([("board_id", 1), ("column_id", 1), ("order", 1)])
+        await self._comments.create_index([("item_id", 1), ("created_at", 1)])
 
     # ---- workspaces ------------------------------------------------------
     async def create_workspace(self, *, owner_id: str, name: str, context: WorkspaceContext) -> dict:
@@ -268,3 +270,31 @@ class WorkspaceRepository:
         item = await self.get_item(item_id, user_id)
         await self._items.delete_one({"_id": _oid(item_id)})
         return item
+
+    # ---- comments ----------------------------------------------------------
+    async def add_comment(self, item_id: str, user_id: str, body: str) -> dict:
+        await self.get_item(item_id, user_id)  # membership check
+        doc = {
+            "item_id": item_id,
+            "user_id": user_id,
+            "body": body,
+            "created_at": utcnow(),
+        }
+        res = await self._comments.insert_one(doc)
+        doc["_id"] = res.inserted_id
+        return oid_to_str(doc)  # type: ignore[return-value]
+
+    async def list_comments(self, item_id: str, user_id: str) -> list[dict]:
+        await self.get_item(item_id, user_id)  # membership check
+        cur = self._comments.find({"item_id": item_id}).sort("created_at", 1)
+        return [oid_to_str(d) for d in await cur.to_list(length=1000)]  # type: ignore[misc]
+
+    async def delete_comment(self, item_id: str, comment_id: str, user_id: str) -> dict:
+        await self.get_item(item_id, user_id)  # membership check
+        comment = await self._comments.find_one({"_id": _oid(comment_id), "item_id": item_id})
+        if not comment:
+            raise NotFound(comment_id)
+        if comment["user_id"] != user_id:
+            raise PermissionError(comment_id)
+        await self._comments.delete_one({"_id": comment["_id"]})
+        return oid_to_str(comment)  # type: ignore[return-value]

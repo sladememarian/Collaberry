@@ -29,6 +29,8 @@ from collaberry_common.models import (
     BoardColumnUpdate,
     BoardCreate,
     BoardPublic,
+    CommentCreate,
+    CommentPublic,
     ItemCreate,
     ItemPublic,
     ItemUpdate,
@@ -310,6 +312,61 @@ async def delete_item(item_id: str, request: Request, claims: TokenClaims = Depe
 
 
 # --------------------------------------------------------------------------- #
+# Comments
+# --------------------------------------------------------------------------- #
+@app.get(
+    "/api/v1/workspace/items/{item_id}/comments",
+    response_model=list[CommentPublic],
+    tags=["comments"],
+)
+async def list_comments(item_id: str, request: Request, claims: TokenClaims = Depends(current_user)):
+    try:
+        rows = await repo(request).list_comments(item_id, claims.user_id)
+    except NotFound:
+        raise HTTPException(status_code=404, detail="Item not found")
+    return [_to_comment(c) for c in rows]
+
+
+@app.post(
+    "/api/v1/workspace/items/{item_id}/comments",
+    response_model=CommentPublic,
+    status_code=201,
+    tags=["comments"],
+)
+async def add_comment(
+    item_id: str,
+    body: CommentCreate,
+    request: Request,
+    claims: TokenClaims = Depends(current_user),
+):
+    try:
+        comment = await repo(request).add_comment(item_id, claims.user_id, body.body)
+    except NotFound:
+        raise HTTPException(status_code=404, detail="Item not found")
+    return _to_comment(comment)
+
+
+@app.delete(
+    "/api/v1/workspace/items/{item_id}/comments/{comment_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    tags=["comments"],
+)
+async def delete_comment(
+    item_id: str,
+    comment_id: str,
+    request: Request,
+    claims: TokenClaims = Depends(current_user),
+):
+    try:
+        await repo(request).delete_comment(item_id, comment_id, claims.user_id)
+    except NotFound:
+        raise HTTPException(status_code=404, detail="Comment not found")
+    except PermissionError:
+        raise HTTPException(status_code=403, detail="You can only delete your own comment")
+    return None
+
+
+# --------------------------------------------------------------------------- #
 # Helpers
 # --------------------------------------------------------------------------- #
 async def _emit(request: Request, event_type: EventType, item: dict, actor_id: str) -> None:
@@ -375,4 +432,14 @@ def _to_item(doc: dict) -> ItemPublic:
         priority=doc.get("priority", 0),
         created_by=doc["created_by"],
         updated_at=doc["updated_at"],
+    )
+
+
+def _to_comment(doc: dict) -> CommentPublic:
+    return CommentPublic(
+        id=doc["id"],
+        item_id=doc["item_id"],
+        user_id=doc["user_id"],
+        body=doc["body"],
+        created_at=doc["created_at"],
     )

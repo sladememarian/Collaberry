@@ -234,6 +234,21 @@ def _validate_item_data(item_type: str, data: dict) -> None:
 
 
 # --------------------------------------------------------------------------- #
+# Comments
+# --------------------------------------------------------------------------- #
+class CommentCreate(BaseModel):
+    body: str = Field(min_length=1, max_length=4000)
+
+
+class CommentPublic(BaseModel):
+    id: str
+    item_id: str
+    user_id: str
+    body: str
+    created_at: datetime
+
+
+# --------------------------------------------------------------------------- #
 # Notifications
 # --------------------------------------------------------------------------- #
 class NotificationPublic(BaseModel):
