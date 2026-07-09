@@ -5,6 +5,12 @@
 module.exports = {
   content: ["./app/**/*.{ts,tsx}", "./src/**/*.{ts,tsx}"],
   presets: [require("nativewind/preset")],
+  // Collaberry is a fixed dark theme. NativeWind's web runtime calls
+  // setColorScheme on boot, which throws under the default 'media' strategy
+  // ("Cannot manually set color scheme, as dark mode is type 'media'"). The
+  // 'class' strategy permits that call; palette is hardcoded (no `dark:`
+  // variants) so there is no visual change — this only silences the error.
+  darkMode: "class",
   theme: {
     extend: {
       colors: {
@@ -41,6 +47,12 @@ module.exports = {
           success: "#34D399",
           warn: "#FBBF24",
           danger: "#F87171",
+        },
+        berry: {
+          // berry accents — mirrors palette.raspberry / blueberry / blackberry
+          raspberry: "#E85C9A",
+          blueberry: "#5B7BF5",
+          blackberry: "#4B2E6B",
         },
       },
       borderRadius: {

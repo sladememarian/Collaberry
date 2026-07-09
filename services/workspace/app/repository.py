@@ -27,6 +27,11 @@ class NotFound(Exception):
     """Raised when a document is absent *or* the caller may not see it."""
 
 
+class ConflictError(Exception):
+    """Raised when a request is valid but conflicts with current state (e.g.
+    deleting a lane that still holds cards). Surfaced by routes as a 409."""
+
+
 def _oid(value: str) -> ObjectId:
     try:
         return ObjectId(value)
@@ -39,12 +44,14 @@ class WorkspaceRepository:
         self._ws = mongo.db["workspaces"]
         self._boards = mongo.db["boards"]
         self._items = mongo.db["items"]
+        self._comments = mongo.db["comments"]
 
     async def ensure_indexes(self) -> None:
         await self._ws.create_index("members.user_id")
         await self._boards.create_index("workspace_id")
         # The hot query is "give me a board's items, in order".
         await self._items.create_index([("board_id", 1), ("column_id", 1), ("order", 1)])
+        await self._comments.create_index([("item_id", 1), ("created_at", 1)])
 
     # ---- workspaces ------------------------------------------------------
     async def create_workspace(self, *, owner_id: str, name: str, context: WorkspaceContext) -> dict:
@@ -123,6 +130,58 @@ class WorkspaceRepository:
         await self._assert_member(board["workspace_id"], user_id)
         return oid_to_str(board)  # type: ignore[return-value]
 
+    async def add_column(self, board_id: str, user_id: str, name: str) -> dict:
+        """Append a new lane to a board (e.g. 'Code review'). Order is one past
+        the current max so it lands on the right of the existing lanes."""
+        board = await self.get_board(board_id, user_id)
+        next_order = max((c["order"] for c in board["columns"]), default=-1) + 1
+        column = Column(id=uuid.uuid4().hex[:8], name=name, order=next_order).model_dump()
+        await self._boards.update_one(
+            {"_id": _oid(board_id)}, {"$push": {"columns": column}}
+        )
+        return await self.get_board(board_id, user_id)
+
+    async def reorder_columns(self, board_id: str, user_id: str, ordered_ids: list[str]) -> dict:
+        """Rewrite lane order from a full list of column ids (drag-to-reorder).
+        The list must be a permutation of the board's current columns — any
+        mismatch is rejected so a stale client can't drop or duplicate a lane."""
+        board = await self.get_board(board_id, user_id)
+        current = {c["id"] for c in board["columns"]}
+        if set(ordered_ids) != current or len(ordered_ids) != len(board["columns"]):
+            raise ConflictError("column order must list every lane exactly once")
+        by_id = {c["id"]: c for c in board["columns"]}
+        new_columns = [{**by_id[cid], "order": i} for i, cid in enumerate(ordered_ids)]
+        await self._boards.update_one(
+            {"_id": _oid(board_id)}, {"$set": {"columns": new_columns}}
+        )
+        return await self.get_board(board_id, user_id)
+
+    async def rename_column(self, board_id: str, user_id: str, column_id: str, name: str) -> dict:
+        board = await self.get_board(board_id, user_id)
+        if not any(c["id"] == column_id for c in board["columns"]):
+            raise NotFound(f"column {column_id}")
+        await self._boards.update_one(
+            {"_id": _oid(board_id), "columns.id": column_id},
+            {"$set": {"columns.$.name": name}},
+        )
+        return await self.get_board(board_id, user_id)
+
+    async def delete_column(self, board_id: str, user_id: str, column_id: str) -> dict:
+        """Remove a lane. Refuses the last remaining lane (a board needs one) and
+        refuses a non-empty lane so cards are never silently orphaned."""
+        board = await self.get_board(board_id, user_id)
+        if not any(c["id"] == column_id for c in board["columns"]):
+            raise NotFound(f"column {column_id}")
+        if len(board["columns"]) <= 1:
+            raise ConflictError("a board must keep at least one column")
+        count = await self._items.count_documents({"board_id": board_id, "column_id": column_id})
+        if count:
+            raise ConflictError("move or delete this column's cards first")
+        await self._boards.update_one(
+            {"_id": _oid(board_id)}, {"$pull": {"columns": {"id": column_id}}}
+        )
+        return await self.get_board(board_id, user_id)
+
     # ---- items -----------------------------------------------------------
     async def _next_order(self, board_id: str, column_id: str) -> float:
         last = await self._items.find_one(
@@ -145,6 +204,10 @@ class WorkspaceRepository:
             "assignees": body.assignees,
             "tags": body.tags,
             "due_date": body.due_date,
+            "estimation_time": body.estimation_time,
+            "start_date": body.start_date,
+            "end_date": body.end_date,
+            "priority": body.priority,
             "created_by": user_id,
             "updated_at": utcnow(),
         }
@@ -171,14 +234,26 @@ class WorkspaceRepository:
 
         if patch.title is not None:
             changes["title"] = patch.title
+        if patch.type is not None:
+            changes["type"] = patch.type.value if hasattr(patch.type, "value") else patch.type
         if patch.data is not None:
             changes["data"] = patch.data
         if patch.assignees is not None:
             changes["assignees"] = patch.assignees
         if patch.tags is not None:
             changes["tags"] = patch.tags
-        if patch.due_date is not None:
+        # These four are cleared with an explicit null, so "was it sent at all"
+        # (not "is it non-null") is what decides whether to touch the field.
+        if "due_date" in patch.model_fields_set:
             changes["due_date"] = patch.due_date
+        if "estimation_time" in patch.model_fields_set:
+            changes["estimation_time"] = patch.estimation_time
+        if "start_date" in patch.model_fields_set:
+            changes["start_date"] = patch.start_date
+        if "end_date" in patch.model_fields_set:
+            changes["end_date"] = patch.end_date
+        if patch.priority is not None:
+            changes["priority"] = patch.priority
         if patch.column_id is not None and patch.column_id != item["column_id"]:
             changes["column_id"] = patch.column_id
             moved = True
@@ -195,3 +270,31 @@ class WorkspaceRepository:
         item = await self.get_item(item_id, user_id)
         await self._items.delete_one({"_id": _oid(item_id)})
         return item
+
+    # ---- comments ----------------------------------------------------------
+    async def add_comment(self, item_id: str, user_id: str, body: str) -> dict:
+        await self.get_item(item_id, user_id)  # membership check
+        doc = {
+            "item_id": item_id,
+            "user_id": user_id,
+            "body": body,
+            "created_at": utcnow(),
+        }
+        res = await self._comments.insert_one(doc)
+        doc["_id"] = res.inserted_id
+        return oid_to_str(doc)  # type: ignore[return-value]
+
+    async def list_comments(self, item_id: str, user_id: str) -> list[dict]:
+        await self.get_item(item_id, user_id)  # membership check
+        cur = self._comments.find({"item_id": item_id}).sort("created_at", 1)
+        return [oid_to_str(d) for d in await cur.to_list(length=1000)]  # type: ignore[misc]
+
+    async def delete_comment(self, item_id: str, comment_id: str, user_id: str) -> dict:
+        await self.get_item(item_id, user_id)  # membership check
+        comment = await self._comments.find_one({"_id": _oid(comment_id), "item_id": item_id})
+        if not comment:
+            raise NotFound(comment_id)
+        if comment["user_id"] != user_id:
+            raise PermissionError(comment_id)
+        await self._comments.delete_one({"_id": comment["_id"]})
+        return oid_to_str(comment)  # type: ignore[return-value]

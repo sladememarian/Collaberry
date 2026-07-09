@@ -21,7 +21,17 @@ import {
 import { ApiError } from "@/api/client";
 import { presenceApi, workspaceApi } from "@/api/endpoints";
 import { AppContainer } from "@/components/AppContainer";
-import { ArrowLeftIcon, CheckIcon, LockIcon, PlusIcon, TrashIcon } from "@/components/icons";
+import {
+  ArrowLeftIcon,
+  ChecklistIcon,
+  CheckIcon,
+  DocumentIcon,
+  FlagIcon,
+  KanbanIcon,
+  LockIcon,
+  PlusIcon,
+  TrashIcon,
+} from "@/components/icons";
 import { Checkbox } from "@/components/editor/blocks/Checkbox";
 import {
   DocumentView,
@@ -29,12 +39,20 @@ import {
   toWireBlocks,
   type EditorBlock,
 } from "@/components/editor/DocumentView";
+import { authApi } from "@/api/endpoints";
+import { CommentsSection } from "@/components/item/CommentsSection";
+import { DateField } from "@/components/item/DateField";
+import { EstimationInput } from "@/components/item/EstimationInput";
+import { Avatar } from "@/components/ui/Avatar";
 import { ContextBadge } from "@/components/ui/Badge";
+import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
+import { DatePickerDialog } from "@/components/ui/DatePickerDialog";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { GlassCard } from "@/components/ui/GlassCard";
 import { useAuth } from "@/context/AuthContext";
 import { palette } from "@/theme/tokens";
-import type { ChecklistData, ChecklistEntry, DocumentData, Item } from "@/types";
+import { PRIORITIES } from "@/theme/priority";
+import type { ChecklistData, ChecklistEntry, Comment, DocumentData, Item, ItemType, Member } from "@/types";
 
 type SaveState = "idle" | "saving" | "saved";
 
@@ -42,18 +60,38 @@ export default function ItemScreen() {
   const { id, boardId } = useLocalSearchParams<{ id: string; boardId?: string }>();
   const itemId = String(id);
   const router = useRouter();
-  const { user } = useAuth();
+  const { user, booting } = useAuth();
 
   const [item, setItem] = useState<Item | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [lockedBy, setLockedBy] = useState<string | null>(null); // someone else's name
   const [save, setSave] = useState<SaveState>("idle");
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [datePicker, setDatePicker] = useState<"start" | "end" | null>(null);
+  const [comments, setComments] = useState<Comment[]>([]);
+
+  // Workspace members, resolved to display names, so the assignee picker shows
+  // people instead of raw ids. Best-effort: if this fails, the picker just stays empty.
+  const [members, setMembers] = useState<Member[]>([]);
+  const [memberNames, setMemberNames] = useState<Record<string, string>>({});
 
   const readOnly = Boolean(lockedBy);
 
+  // Robust back: on web a deep-linked screen has no history, so router.back()
+  // silently no-ops. Fall back to the board (or home) so the arrow always works.
+  const goBack = useCallback(() => {
+    if (router.canGoBack()) router.back();
+    else if (boardId) router.replace({ pathname: "/(app)/board/[id]", params: { id: String(boardId) } });
+    else router.replace("/(app)");
+  }, [router, boardId]);
+
   // --- load + lock -------------------------------------------------------- //
   useEffect(() => {
+    // The auth token is rehydrated from storage asynchronously on app boot;
+    // firing this before it lands races the client into sending requests with
+    // no JWT yet, which the user sees as a false "Jwt is missing" error.
+    if (booting) return;
     let released = false;
     (async () => {
       try {
@@ -62,6 +100,27 @@ export default function ItemScreen() {
         const found = items.find((i) => i.id === itemId) ?? null;
         if (!found) throw new ApiError(404, null, "This item no longer exists.");
         setItem(found);
+
+        // Best-effort: resolve the item's workspace members so the assignee picker
+        // can show real people. Not fatal if any step fails — picker just stays empty.
+        try {
+          const workspaces = await workspaceApi.list();
+          const ws = workspaces.find((w) => w.id === found.workspace_id);
+          if (ws) {
+            setMembers(ws.members);
+            const people = await authApi.usersByIds(ws.members.map((m) => m.user_id));
+            setMemberNames(Object.fromEntries(people.map((p) => [p.id, p.display_name])));
+          }
+        } catch {
+          /* assignee picker just shows nothing to pick — not worth failing the screen over */
+        }
+
+        // Best-effort: fetch comments. Not fatal if it fails — the section just stays empty.
+        try {
+          setComments(await workspaceApi.listComments(itemId));
+        } catch {
+          /* comments section just shows nothing — not worth failing the screen over */
+        }
 
         // Best-effort lock. 423 => held by someone else; anything else, edit freely.
         try {
@@ -85,7 +144,7 @@ export default function ItemScreen() {
       presenceApi.releaseLock(itemId).catch(() => {});
       void released;
     };
-  }, [itemId, boardId]);
+  }, [itemId, boardId, booting]);
 
   // --- debounced persist -------------------------------------------------- //
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -112,9 +171,30 @@ export default function ItemScreen() {
     if (timer.current) clearTimeout(timer.current);
   }, []);
 
+  // --- type switch -------------------------------------------------------- //
+  // Changing an item's kind (card ↔ checklist ↔ document) reshapes its data.
+  // We carry the text across where it makes sense so a switch isn't destructive,
+  // and persist immediately (not debounced) since it's a structural change.
+  const changeType = useCallback(
+    async (nextType: ItemType) => {
+      if (readOnly || !item || item.type === nextType) return;
+      const data = convertItemData(item, nextType);
+      setSave("saving");
+      try {
+        const updated = await workspaceApi.updateItem(itemId, { type: nextType, data });
+        setItem(updated);
+        setSave("saved");
+        setTimeout(() => setSave("idle"), 1200);
+      } catch {
+        setSave("idle");
+      }
+    },
+    [itemId, item, readOnly],
+  );
+
   if (loading) {
     return (
-      <AppContainer>
+      <AppContainer variant="aurora">
         <View className="flex-1 items-center justify-center">
           <ActivityIndicator color={palette.purple} />
         </View>
@@ -124,22 +204,19 @@ export default function ItemScreen() {
 
   if (error || !item) {
     return (
-      <AppContainer>
-        <Header onBack={() => router.back()} save="idle" />
+      <AppContainer variant="aurora">
+        <Header onBack={goBack} save="idle" />
         <EmptyState title="Nothing to show" body={error ?? undefined} />
       </AppContainer>
     );
   }
 
   return (
-    <AppContainer edgeToEdge>
+    <AppContainer edgeToEdge variant="aurora">
       <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : undefined} className="flex-1">
-        <Header onBack={() => router.back()} save={save} onDelete={async () => {
-          try {
-            await workspaceApi.deleteItem(itemId);
-            router.back();
-          } catch { /* stay put on failure */ }
-        }} />
+        {/* Delete is destructive and irreversible — confirm first ("are you sure?"
+            card). A cross-platform dialog because Alert.alert is a no-op on web. */}
+        <Header onBack={goBack} save={save} onDelete={readOnly ? undefined : () => setConfirmDelete(true)} />
 
         <ScrollView className="flex-1" contentContainerStyle={{ padding: 20, paddingBottom: 60 }} keyboardShouldPersistTaps="handled">
           {lockedBy ? (
@@ -167,21 +244,306 @@ export default function ItemScreen() {
             multiline
           />
 
+          <TypeSwitcher value={item.type} readOnly={readOnly} onChange={changeType} />
+          <PriorityPicker
+            value={item.priority}
+            readOnly={readOnly}
+            onChange={(priority) => {
+              setItem((cur) => (cur ? { ...cur, priority } : cur));
+              persist({ priority });
+            }}
+          />
+          <AssigneePicker
+            members={members}
+            names={memberNames}
+            selected={item.assignees}
+            readOnly={readOnly}
+            onToggle={(userId) => {
+              const assignees = item.assignees.includes(userId)
+                ? item.assignees.filter((id) => id !== userId)
+                : [...item.assignees, userId];
+              setItem((cur) => (cur ? { ...cur, assignees } : cur));
+              persist({ assignees });
+            }}
+          />
+          <View className="mt-4 flex-row gap-4">
+            <View className="flex-1">
+              <EstimationInput
+                readOnly={readOnly}
+                value={item.estimation_time}
+                onCommit={(estimation_time) => persist({ estimation_time })}
+              />
+            </View>
+            <View className="flex-1">
+              <Text className="mb-2 text-meta uppercase text-text-low">Start date</Text>
+              <DateField
+                readOnly={readOnly}
+                value={item.start_date}
+                testID="start-date"
+                onPress={() => setDatePicker("start")}
+              />
+            </View>
+            <View className="flex-1">
+              <Text className="mb-2 text-meta uppercase text-text-low">End date</Text>
+              <DateField
+                readOnly={readOnly}
+                value={item.end_date}
+                testID="end-date"
+                onPress={() => setDatePicker("end")}
+              />
+            </View>
+          </View>
           <View className="my-5 h-px bg-ink-border" />
 
-          {item.type === "card" && <CardBody item={item} readOnly={readOnly} onChange={(desc) => persist({ data: { description: desc } })} />}
-          {item.type === "checklist" && <ChecklistBody item={item} readOnly={readOnly} onChange={(entries) => persist({ data: { entries } })} />}
-          {item.type === "document" && (
-            <DocumentBody
-              item={item}
-              currentUser={user?.display_name ?? "You"}
-              readOnly={readOnly}
-              onChange={(blocks) => persist({ data: { blocks } })}
-            />
+          {item.type === "card" ? (
+            <View className="flex-row gap-5">
+              <View className="flex-1">
+                <CardBody item={item} readOnly={readOnly} onChange={(desc) => persist({ data: { description: desc } })} />
+              </View>
+              <View className="flex-1">
+                <CommentsSection
+                  comments={comments}
+                  currentUserId={user?.id}
+                  names={memberNames}
+                  onAdd={async (body) => {
+                    const created = await workspaceApi.addComment(itemId, body);
+                    setComments((cur) => [...cur, created]);
+                  }}
+                  onDelete={async (commentId) => {
+                    await workspaceApi.deleteComment(itemId, commentId);
+                    setComments((cur) => cur.filter((c) => c.id !== commentId));
+                  }}
+                />
+              </View>
+            </View>
+          ) : (
+            <>
+              {item.type === "checklist" && <ChecklistBody item={item} readOnly={readOnly} onChange={(entries) => persist({ data: { entries } })} />}
+              {item.type === "document" && (
+                <DocumentBody
+                  item={item}
+                  currentUser={user?.display_name ?? "You"}
+                  readOnly={readOnly}
+                  onChange={(blocks) => persist({ data: { blocks } })}
+                />
+              )}
+              <View className="mt-5">
+                <CommentsSection
+                  comments={comments}
+                  currentUserId={user?.id}
+                  names={memberNames}
+                  onAdd={async (body) => {
+                    const created = await workspaceApi.addComment(itemId, body);
+                    setComments((cur) => [...cur, created]);
+                  }}
+                  onDelete={async (commentId) => {
+                    await workspaceApi.deleteComment(itemId, commentId);
+                    setComments((cur) => cur.filter((c) => c.id !== commentId));
+                  }}
+                />
+              </View>
+            </>
           )}
         </ScrollView>
       </KeyboardAvoidingView>
+
+      <DatePickerDialog
+        open={datePicker !== null}
+        value={datePicker === "start" ? item.start_date : item.end_date}
+        onSelect={(iso) => {
+          if (datePicker === "start") persist({ start_date: iso });
+          else if (datePicker === "end") persist({ end_date: iso });
+          setDatePicker(null);
+        }}
+        onClear={() => {
+          if (datePicker === "start") persist({ start_date: null });
+          else if (datePicker === "end") persist({ end_date: null });
+          setDatePicker(null);
+        }}
+        onClose={() => setDatePicker(null)}
+      />
+
+      <ConfirmDialog
+        open={confirmDelete}
+        title="Delete this item?"
+        message="This can't be undone."
+        confirmLabel="Delete"
+        destructive
+        onCancel={() => setConfirmDelete(false)}
+        onConfirm={async () => {
+          setConfirmDelete(false);
+          try {
+            await workspaceApi.deleteItem(itemId);
+            goBack();
+          } catch {
+            /* stay put on failure */
+          }
+        }}
+      />
     </AppContainer>
+  );
+}
+
+// --------------------------------------------------------------------------- //
+const TYPE_CHOICES: { type: ItemType; label: string; icon: (c: string) => React.ReactNode }[] = [
+  { type: "card", label: "Task", icon: (c) => <KanbanIcon size={15} color={c} strokeWidth={1.9} /> },
+  { type: "checklist", label: "Checklist", icon: (c) => <ChecklistIcon size={15} color={c} strokeWidth={1.9} /> },
+  { type: "document", label: "Document", icon: (c) => <DocumentIcon size={15} color={c} strokeWidth={1.9} /> },
+];
+
+/** Segmented control to switch a card ↔ checklist ↔ document in place. */
+function TypeSwitcher({
+  value,
+  readOnly,
+  onChange,
+}: {
+  value: ItemType;
+  readOnly: boolean;
+  onChange: (type: ItemType) => void;
+}) {
+  return (
+    <View className="mt-4">
+      <Text className="mb-2 text-meta uppercase text-text-low">Type</Text>
+      <View className="flex-row gap-2">
+        {TYPE_CHOICES.map((c) => {
+          const on = c.type === value;
+          return (
+            <Pressable
+              key={c.type}
+              disabled={readOnly}
+              onPress={() => onChange(c.type)}
+              className="flex-row items-center gap-1.5 rounded-md border px-3 py-2"
+              style={{
+                borderColor: on ? palette.purple : palette.border,
+                backgroundColor: on ? "rgba(168,85,247,0.10)" : "transparent",
+                opacity: readOnly ? 0.5 : 1,
+              }}
+            >
+              {c.icon(on ? palette.purpleSoft : palette.textMid)}
+              <Text className="text-sub font-medium" style={{ color: on ? palette.purpleSoft : palette.textMid }}>
+                {c.label}
+              </Text>
+            </Pressable>
+          );
+        })}
+      </View>
+    </View>
+  );
+}
+
+/**
+ * Best-effort reshape of an item's `data` when its type changes, so switching
+ * kind doesn't silently drop the user's content. Text is carried across:
+ * a card's description ⇆ checklist entries ⇆ document paragraphs.
+ */
+function convertItemData(item: Item, to: ItemType): Record<string, unknown> {
+  const lines = itemTextLines(item);
+  if (to === "card") return { description: lines.join("\n") };
+  if (to === "checklist") return { entries: lines.filter(Boolean).map((text) => ({ text, done: false })) };
+  return { blocks: (lines.length ? lines : [""]).map((text) => ({ type: "paragraph", text })) };
+}
+
+/** Flatten any item variant's textual content into plain lines. */
+function itemTextLines(item: Item): string[] {
+  if (item.type === "card") {
+    const d = (item.data as { description?: string })?.description ?? "";
+    return d ? d.split("\n") : [];
+  }
+  if (item.type === "checklist") {
+    return ((item.data as ChecklistData)?.entries ?? []).map((e) => e.text).filter(Boolean);
+  }
+  return ((item.data as DocumentData)?.blocks ?? []).map((b) => b.text ?? "").filter(Boolean);
+}
+
+// --------------------------------------------------------------------------- //
+/** Inline 3-state (+none) priority selector. Persists on tap. */
+function PriorityPicker({
+  value,
+  readOnly,
+  onChange,
+}: {
+  value: number;
+  readOnly: boolean;
+  onChange: (value: number) => void;
+}) {
+  return (
+    <View className="mt-4">
+      <Text className="mb-2 text-meta uppercase text-text-low">Priority</Text>
+      <View className="flex-row gap-2">
+        {PRIORITIES.map((p) => {
+          const on = p.value === value;
+          return (
+            <Pressable
+              key={p.value}
+              disabled={readOnly}
+              onPress={() => onChange(p.value)}
+              className="flex-row items-center gap-1.5 rounded-md border px-3 py-2"
+              style={{
+                borderColor: on ? p.color : palette.border,
+                backgroundColor: on ? `${p.color}1f` : "transparent",
+                opacity: readOnly ? 0.5 : 1,
+              }}
+            >
+              {p.value > 0 ? <FlagIcon size={13} color={on ? p.color : palette.textLow} /> : null}
+              <Text className="text-sub font-medium" style={{ color: on ? p.color : palette.textMid }}>
+                {p.label}
+              </Text>
+            </Pressable>
+          );
+        })}
+      </View>
+    </View>
+  );
+}
+
+// --------------------------------------------------------------------------- //
+/** Tap-to-toggle picker of the item's assignees, drawn from the board's workspace members. */
+function AssigneePicker({
+  members,
+  names,
+  selected,
+  readOnly,
+  onToggle,
+}: {
+  members: Member[];
+  names: Record<string, string>;
+  selected: string[];
+  readOnly: boolean;
+  onToggle: (userId: string) => void;
+}) {
+  return (
+    <View className="mt-4">
+      <Text className="mb-2 text-meta uppercase text-text-low">Assignees</Text>
+      {members.length === 0 ? (
+        <Text className="text-sub text-text-faint">No workspace members to assign.</Text>
+      ) : (
+        <View className="gap-1.5">
+          {members.map((m) => {
+            const on = selected.includes(m.user_id);
+            const name = names[m.user_id] ?? "Member";
+            return (
+              <Pressable
+                key={m.user_id}
+                disabled={readOnly}
+                onPress={() => onToggle(m.user_id)}
+                className="flex-row items-center gap-3 rounded-md border px-3 py-2"
+                style={{
+                  borderColor: on ? palette.purple : palette.border,
+                  backgroundColor: on ? "rgba(168,85,247,0.10)" : "transparent",
+                  opacity: readOnly ? 0.5 : 1,
+                }}
+              >
+                <Avatar name={name} id={m.user_id} size={26} />
+                <Text className="flex-1 text-sub font-medium" style={{ color: on ? palette.purpleSoft : palette.textMid }}>
+                  {name}
+                </Text>
+                {on ? <CheckIcon size={15} color={palette.purpleSoft} /> : null}
+              </Pressable>
+            );
+          })}
+        </View>
+      )}
+    </View>
   );
 }
 

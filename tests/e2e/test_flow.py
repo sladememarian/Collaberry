@@ -152,6 +152,33 @@ def test_move_and_update_item(owner: ApiUser, board: dict):
     assert renamed["title"] == "Renamed"
 
 
+def test_item_priority_end_to_end(owner: ApiUser, board: dict):
+    # Default 0, settable at creation, updatable via PATCH, and range-checked -
+    # all the way through Envoy, the real workspace service, and Mongo.
+    plain = owner.http.post(
+        f"/api/v1/workspace/boards/{board['id']}/items",
+        json={"type": "card", "title": "later", "column_id": _col(board, 0)},
+    ).json()
+    assert plain["priority"] == 0
+
+    urgent = owner.http.post(
+        f"/api/v1/workspace/boards/{board['id']}/items",
+        json={"type": "card", "title": "now", "column_id": _col(board, 0), "priority": 3},
+    ).json()
+    assert urgent["priority"] == 3
+
+    bumped = owner.http.patch(
+        f"/api/v1/workspace/items/{plain['id']}", json={"priority": 2}
+    ).json()
+    assert bumped["priority"] == 2
+
+    bad = owner.http.post(
+        f"/api/v1/workspace/boards/{board['id']}/items",
+        json={"type": "card", "title": "x", "column_id": _col(board, 0), "priority": 5},
+    )
+    assert bad.status_code == 422
+
+
 def test_delete_item(owner: ApiUser, board: dict):
     item = owner.http.post(
         f"/api/v1/workspace/boards/{board['id']}/items",
@@ -160,6 +187,142 @@ def test_delete_item(owner: ApiUser, board: dict):
     assert owner.http.delete(f"/api/v1/workspace/items/{item['id']}").status_code == 204
     remaining = owner.http.get(f"/api/v1/workspace/boards/{board['id']}/items").json()
     assert item["id"] not in {i["id"] for i in remaining}
+
+
+# --------------------------------------------------------------------------- #
+# Full user flows, verified by an independent read-back through the gateway.
+#
+# The tests above assert on the mutation *response*. These re-fetch state with a
+# fresh GET so we prove the change actually landed in Mongo (and survives the
+# round-trip through Envoy + the workspace service), not just that the write
+# echoed our input back. That distinction is what "accurate" e2e means here:
+# nothing is trusted until it's been read back out of the persisted list.
+# --------------------------------------------------------------------------- #
+def _item_in_list(user: ApiUser, board_id: str, item_id: str) -> dict | None:
+    """Fetch the board's items and return the one with ``item_id`` (or None)."""
+    items = user.http.get(f"/api/v1/workspace/boards/{board_id}/items").json()
+    return next((i for i in items if i["id"] == item_id), None)
+
+
+def test_priority_flow_persists_end_to_end(base_url: str):
+    """register → login → workspace → board → card → PATCH priority → read back.
+
+    A self-contained walk of goal #1 that owns its whole user, so it never leans
+    on shared fixtures and stays deterministic under parallel runs.
+    """
+    from .conftest import _register
+
+    user = _register(base_url, "PriorityWalker")
+    try:
+        # Fresh login proves the just-minted credentials actually authenticate,
+        # not only the register-issued token.
+        login = user.http.post(
+            "/api/v1/auth/login",
+            json={"email": user.email, "password": "supersecret123"},
+        )
+        assert login.status_code == 200
+
+        ws = user.http.post(
+            "/api/v1/workspace/workspaces",
+            json={"name": "Priority WS", "context": "work"},
+        ).json()
+        board = user.http.post(
+            f"/api/v1/workspace/workspaces/{ws['id']}/boards",
+            json={"name": "Priorities"},
+        ).json()
+        todo = board["columns"][0]["id"]
+
+        card = user.http.post(
+            f"/api/v1/workspace/boards/{board['id']}/items",
+            json={"type": "card", "title": "Triage me", "column_id": todo},
+        ).json()
+        assert card["priority"] == 0  # defaults to "none"
+
+        patched = user.http.patch(
+            f"/api/v1/workspace/items/{card['id']}", json={"priority": 3}
+        )
+        assert patched.status_code == 200
+        assert patched.json()["priority"] == 3
+
+        # The load-bearing assertion: re-read the board and confirm persistence.
+        fetched = _item_in_list(user, board["id"], card["id"])
+        assert fetched is not None
+        assert fetched["priority"] == 3
+        assert fetched["title"] == "Triage me"  # PATCH touched nothing else
+    finally:
+        user.close()
+
+
+def test_delete_removes_item_from_read_back(owner: ApiUser, board: dict):
+    """Goal #2: the API-level contract behind the "are you sure?" confirm dialog.
+
+    Create two items, delete one, and prove via a fresh list that exactly the
+    deleted item is gone while its sibling survives (guards against a delete that
+    nukes too much).
+    """
+    keep = owner.http.post(
+        f"/api/v1/workspace/boards/{board['id']}/items",
+        json={"type": "card", "title": "Keep", "column_id": _col(board, 0)},
+    ).json()
+    doomed = owner.http.post(
+        f"/api/v1/workspace/boards/{board['id']}/items",
+        json={"type": "card", "title": "Delete", "column_id": _col(board, 0)},
+    ).json()
+
+    # Sanity: both are present before the delete.
+    assert _item_in_list(owner, board["id"], keep["id"]) is not None
+    assert _item_in_list(owner, board["id"], doomed["id"]) is not None
+
+    assert owner.http.delete(f"/api/v1/workspace/items/{doomed['id']}").status_code == 204
+
+    # Read back: the doomed item is gone, the sibling remains.
+    assert _item_in_list(owner, board["id"], doomed["id"]) is None
+    assert _item_in_list(owner, board["id"], keep["id"]) is not None
+
+    # A second delete of the now-missing item is a clean 404 (idempotent-ish).
+    assert owner.http.delete(f"/api/v1/workspace/items/{doomed['id']}").status_code == 404
+
+
+def test_board_columns_default_names(owner: ApiUser):
+    """Goal #3a: a new board's lanes are exactly To do / In progress / Done, ordered."""
+    ws = owner.http.post(
+        "/api/v1/workspace/workspaces", json={"name": "Lanes", "context": "work"}
+    ).json()
+    board = owner.http.post(
+        f"/api/v1/workspace/workspaces/{ws['id']}/boards", json={"name": "Default lanes"}
+    ).json()
+
+    columns = board["columns"]
+    assert [c["name"] for c in columns] == ["To do", "In progress", "Done"]
+    assert [c["order"] for c in columns] == [0, 1, 2]
+    assert all(c["id"] for c in columns)
+
+    # Persisted: a fresh GET of the board reports the same lanes.
+    refetched = owner.http.get(f"/api/v1/workspace/boards/{board['id']}").json()
+    assert [c["name"] for c in refetched["columns"]] == ["To do", "In progress", "Done"]
+
+
+def test_move_item_between_columns_persists(owner: ApiUser, board: dict):
+    """Goal #3b: PATCH column_id moves a card To do → In progress → Done, and sticks."""
+    todo, doing, done = _col(board, 0), _col(board, 1), _col(board, 2)
+
+    item = owner.http.post(
+        f"/api/v1/workspace/boards/{board['id']}/items",
+        json={"type": "card", "title": "Travelling card", "column_id": todo},
+    ).json()
+    assert item["column_id"] == todo
+
+    for target in (doing, done):
+        resp = owner.http.patch(
+            f"/api/v1/workspace/items/{item['id']}", json={"column_id": target}
+        )
+        assert resp.status_code == 200
+        assert resp.json()["column_id"] == target
+
+        # Read-back: the move is durable, not just reflected in the PATCH echo.
+        fetched = _item_in_list(owner, board["id"], item["id"])
+        assert fetched is not None
+        assert fetched["column_id"] == target
 
 
 # --------------------------------------------------------------------------- #

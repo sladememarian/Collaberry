@@ -6,7 +6,7 @@ WORKDIR /app
 
 # Shared library first — it changes least, so the layer caches well.
 COPY common /app/common
-RUN pip install --no-cache-dir ./common
+RUN pip install --no-cache-dir -e ./common
 
 COPY auth/requirements.txt /app/auth/requirements.txt
 RUN pip install --no-cache-dir -r /app/auth/requirements.txt

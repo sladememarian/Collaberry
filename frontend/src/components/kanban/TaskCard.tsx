@@ -6,10 +6,11 @@
 import React, { memo } from "react";
 import { Text, View } from "react-native";
 
-import { ChecklistIcon, DocumentIcon, KanbanIcon, LockIcon } from "@/components/icons";
+import { ChecklistIcon, DocumentIcon, FlagIcon, KanbanIcon, LockIcon } from "@/components/icons";
 import { Avatar } from "@/components/ui/Avatar";
 import { ContextBadge, TagChip } from "@/components/ui/Badge";
 import { GlassCard } from "@/components/ui/GlassCard";
+import { priorityMeta } from "@/theme/priority";
 import { contextAccent, palette, type WorkspaceContext } from "@/theme/tokens";
 import type { ChecklistData, Item } from "@/types";
 
@@ -75,6 +76,7 @@ function TaskCardBase({ item, workspaceContext, lockedByName, onPress }: Props) 
         <View className="flex-row items-center gap-1.5">
           <TypeGlyph type={item.type} color={accent.color} />
           <ContextBadge context={ctx} />
+          {item.priority > 0 ? <PriorityPip priority={item.priority} /> : null}
         </View>
         {locked ? (
           <View className="flex-row items-center gap-1">
@@ -143,6 +145,22 @@ function TaskCardBase({ item, workspaceContext, lockedByName, onPress }: Props) 
         </View>
       )}
     </GlassCard>
+  );
+}
+
+/** A compact priority flag chip; only rendered for low/medium/high (not none). */
+function PriorityPip({ priority }: { priority: number }) {
+  const p = priorityMeta(priority);
+  return (
+    <View
+      className="flex-row items-center gap-1 self-start rounded-pill border px-1.5 py-0.5"
+      style={{ borderColor: `${p.color}55`, backgroundColor: `${p.color}14` }}
+    >
+      <FlagIcon size={10} color={p.color} strokeWidth={2.2} />
+      <Text className="text-meta uppercase" style={{ color: p.color }}>
+        {p.short}
+      </Text>
+    </View>
   );
 }
 

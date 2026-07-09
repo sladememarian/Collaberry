@@ -2,10 +2,11 @@
 
 COMPOSE = docker compose
 
-.PHONY: help up down build logs ps test test-unit test-e2e stress fe-check clean
+.PHONY: help up dev down build logs ps test test-unit test-e2e stress fe-check clean
 
 help:
-	@echo "up          - build + start the whole stack (Envoy on :8080)"
+	@echo "up          - build + start the whole stack (Envoy on :8088)"
+	@echo "dev         - start in watch mode: backend hot-reloads on edit, no rebuild"
 	@echo "down        - stop and remove everything"
 	@echo "logs        - tail all service logs"
 	@echo "test        - run unit + integration + e2e (brings the stack up)"
@@ -16,6 +17,9 @@ help:
 
 up:
 	$(COMPOSE) up --build -d
+
+dev:
+	bash scripts/dev.sh
 
 down:
 	$(COMPOSE) down -v

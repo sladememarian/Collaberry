@@ -99,6 +99,20 @@ class BoardCreate(BaseModel):
     columns: list[str] = Field(default_factory=lambda: ["To do", "In progress", "Done"])
 
 
+class BoardColumnCreate(BaseModel):
+    # Add a lane to an existing board (e.g. "Code review", "Scrum review").
+    name: str = Field(min_length=1, max_length=60)
+
+
+class BoardColumnUpdate(BaseModel):
+    name: str = Field(min_length=1, max_length=60)
+
+
+class BoardColumnReorder(BaseModel):
+    # The full set of column ids in their new left-to-right order.
+    order: list[str] = Field(min_length=1)
+
+
 class BoardPublic(BaseModel):
     id: str
     workspace_id: str
@@ -136,6 +150,12 @@ class ItemCreate(BaseModel):
     assignees: list[str] = Field(default_factory=list)
     tags: list[str] = Field(default_factory=list)
     due_date: datetime | None = None
+    estimation_time: float | None = None  # in hours
+    start_date: datetime | None = None
+    end_date: datetime | None = None
+    # 0 none · 1 low · 2 medium · 3 high. An int (not an enum) so it sorts
+    # naturally and never needs a migration if the labels are ever re-tuned.
+    priority: int = Field(default=0, ge=0, le=3)
 
     @model_validator(mode="after")
     def _shape_matches_type(self) -> "ItemCreate":
@@ -145,17 +165,32 @@ class ItemCreate(BaseModel):
 
 class ItemUpdate(BaseModel):
     title: str | None = Field(default=None, min_length=1, max_length=200)
+    # Switch a card ↔ checklist ↔ document in place. When set, `data` should be
+    # sent alongside it so the blob matches the new variant (validated below).
+    type: ItemType | None = None
     column_id: str | None = None
     order: float | None = None
     data: dict[str, Any] | None = None
     assignees: list[str] | None = None
     tags: list[str] | None = None
     due_date: datetime | None = None
+    estimation_time: float | None = None
+    start_date: datetime | None = None
+    end_date: datetime | None = None
+    priority: int | None = Field(default=None, ge=0, le=3)
 
     @field_validator("data")
     @classmethod
     def _non_null_data(cls, v: dict | None) -> dict | None:
         return v
+
+    @model_validator(mode="after")
+    def _shape_matches_type(self) -> "ItemUpdate":
+        # Only enforce shape when the caller is changing the type and supplying
+        # the new data together; a bare field patch leaves data untouched.
+        if self.type is not None and self.data is not None:
+            _validate_item_data(self.type, self.data)
+        return self
 
 
 class ItemPublic(BaseModel):
@@ -170,6 +205,10 @@ class ItemPublic(BaseModel):
     assignees: list[str]
     tags: list[str]
     due_date: datetime | None
+    estimation_time: float | None = None
+    start_date: datetime | None = None
+    end_date: datetime | None = None
+    priority: int = 0
     created_by: str
     updated_at: datetime
 
@@ -192,6 +231,21 @@ def _validate_item_data(item_type: str, data: dict) -> None:
         # A card just carries an optional description; anything else is ignored.
         if "description" in data and not isinstance(data["description"], str):
             raise ValueError("card description must be a string")
+
+
+# --------------------------------------------------------------------------- #
+# Comments
+# --------------------------------------------------------------------------- #
+class CommentCreate(BaseModel):
+    body: str = Field(min_length=1, max_length=4000)
+
+
+class CommentPublic(BaseModel):
+    id: str
+    item_id: str
+    user_id: str
+    body: str
+    created_at: datetime
 
 
 # --------------------------------------------------------------------------- #

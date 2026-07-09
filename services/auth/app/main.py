@@ -133,3 +133,47 @@ async def me(request: Request, claims: TokenClaims = Depends(current_user)) -> U
         display_name=user["display_name"],
         created_at=user["created_at"],
     )
+
+
+@app.get("/api/v1/auth/users/by-ids", response_model=list[UserPublic], tags=["auth"])
+async def users_by_ids(
+    ids: str, request: Request, claims: TokenClaims = Depends(current_user)
+) -> list[UserPublic]:
+    """Resolve a batch of user ids to public profiles.
+
+    Workspace membership is stored by opaque ``user_id``, but a UI that lets you
+    assign a task to a teammate needs their display name, not their id. ``ids``
+    is a comma-separated list; unknown or malformed ids are dropped rather than
+    erroring the whole request.
+    """
+    wanted = [i for i in (ids.split(",") if ids else []) if i]
+    users = await repo(request).get_by_ids(wanted)
+    return [
+        UserPublic(
+            id=u["id"], email=u["email"], display_name=u["display_name"], created_at=u["created_at"]
+        )
+        for u in users
+    ]
+
+
+@app.get("/api/v1/auth/users/by-email", response_model=UserPublic, tags=["auth"])
+async def user_by_email(
+    email: str, request: Request, claims: TokenClaims = Depends(current_user)
+) -> UserPublic:
+    """Resolve an email to its public profile.
+
+    Workspaces are shared by email — a human knows the person they're inviting by
+    address, not by opaque id — but membership is stored by ``user_id``. This is the
+    lookup that bridges the two. It requires a valid token (the caller must already
+    be signed in to invite anyone), which is what stops it from being an open email
+    enumeration endpoint despite auth-service's routes being public at the edge.
+    """
+    user = await repo(request).get_by_email(email)
+    if not user:
+        raise HTTPException(status_code=404, detail="No one is registered with that email")
+    return UserPublic(
+        id=user["id"],
+        email=user["email"],
+        display_name=user["display_name"],
+        created_at=user["created_at"],
+    )

@@ -1,0 +1,43 @@
+# Watch/hot-reload overlay for local development.
+#
+#   docker compose -f docker-compose.yml -f docker-compose.dev.yml up --build
+#   (or just: make dev)
+#
+# What it changes vs the base compose:
+#   * bind-mounts each service's source (and the shared `common` package) into
+#     the container, so a file you edit on the host is instantly visible inside;
+#   * runs uvicorn with --reload, so it restarts the app on any .py change.
+#
+# Net effect: edit backend code, hit save, the service reloads in ~1s. No
+# rebuild, no restart. You only rebuild when *dependencies* change
+# (requirements.txt). The `common` package is an editable install in the image,
+# which is what lets its bind-mount hot-reload too.
+
+services:
+  auth-service:
+    command: ["uvicorn", "auth.app.main:app", "--host", "0.0.0.0", "--port", "8000",
+              "--reload", "--reload-dir", "/app/auth", "--reload-dir", "/app/common"]
+    volumes:
+      - ./services/auth:/app/auth
+      - ./services/common:/app/common
+
+  workspace-service:
+    command: ["uvicorn", "workspace.app.main:app", "--host", "0.0.0.0", "--port", "8000",
+              "--reload", "--reload-dir", "/app/workspace", "--reload-dir", "/app/common"]
+    volumes:
+      - ./services/workspace:/app/workspace
+      - ./services/common:/app/common
+
+  presence-service:
+    command: ["uvicorn", "presence.app.main:app", "--host", "0.0.0.0", "--port", "8000",
+              "--reload", "--reload-dir", "/app/presence", "--reload-dir", "/app/common"]
+    volumes:
+      - ./services/presence:/app/presence
+      - ./services/common:/app/common
+
+  notification-service:
+    command: ["uvicorn", "notification.app.main:app", "--host", "0.0.0.0", "--port", "8000",
+              "--reload", "--reload-dir", "/app/notification", "--reload-dir", "/app/common"]
+    volumes:
+      - ./services/notification:/app/notification
+      - ./services/common:/app/common

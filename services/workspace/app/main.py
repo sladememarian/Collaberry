@@ -24,8 +24,13 @@ from collaberry_common.events import (
     publish_notify_event,
 )
 from collaberry_common.models import (
+    BoardColumnCreate,
+    BoardColumnReorder,
+    BoardColumnUpdate,
     BoardCreate,
     BoardPublic,
+    CommentCreate,
+    CommentPublic,
     ItemCreate,
     ItemPublic,
     ItemUpdate,
@@ -38,7 +43,7 @@ from collaberry_common.redis_client import make_redis
 from collaberry_common.security import TokenClaims, load_public_key
 from collaberry_common.settings import get_settings
 
-from .repository import NotFound, WorkspaceRepository
+from .repository import ConflictError, NotFound, WorkspaceRepository
 
 
 @asynccontextmanager
@@ -165,6 +170,84 @@ async def get_board(board_id: str, request: Request, claims: TokenClaims = Depen
         raise HTTPException(status_code=404, detail="Board not found")
 
 
+@app.post(
+    "/api/v1/workspace/boards/{board_id}/columns",
+    response_model=BoardPublic,
+    status_code=201,
+    tags=["boards"],
+)
+async def add_column(
+    board_id: str,
+    body: BoardColumnCreate,
+    request: Request,
+    claims: TokenClaims = Depends(current_user),
+):
+    try:
+        board = await repo(request).add_column(board_id, claims.user_id, body.name)
+    except NotFound:
+        raise HTTPException(status_code=404, detail="Board not found")
+    return _to_board(board)
+
+
+@app.put(
+    "/api/v1/workspace/boards/{board_id}/columns/order",
+    response_model=BoardPublic,
+    tags=["boards"],
+)
+async def reorder_columns(
+    board_id: str,
+    body: BoardColumnReorder,
+    request: Request,
+    claims: TokenClaims = Depends(current_user),
+):
+    try:
+        board = await repo(request).reorder_columns(board_id, claims.user_id, body.order)
+    except NotFound:
+        raise HTTPException(status_code=404, detail="Board not found")
+    except ConflictError as exc:
+        raise HTTPException(status_code=409, detail=str(exc))
+    return _to_board(board)
+
+
+@app.patch(
+    "/api/v1/workspace/boards/{board_id}/columns/{column_id}",
+    response_model=BoardPublic,
+    tags=["boards"],
+)
+async def rename_column(
+    board_id: str,
+    column_id: str,
+    body: BoardColumnUpdate,
+    request: Request,
+    claims: TokenClaims = Depends(current_user),
+):
+    try:
+        board = await repo(request).rename_column(board_id, claims.user_id, column_id, body.name)
+    except NotFound as exc:
+        raise HTTPException(status_code=404, detail=str(exc) or "Board not found")
+    return _to_board(board)
+
+
+@app.delete(
+    "/api/v1/workspace/boards/{board_id}/columns/{column_id}",
+    response_model=BoardPublic,
+    tags=["boards"],
+)
+async def delete_column(
+    board_id: str,
+    column_id: str,
+    request: Request,
+    claims: TokenClaims = Depends(current_user),
+):
+    try:
+        board = await repo(request).delete_column(board_id, claims.user_id, column_id)
+    except NotFound as exc:
+        raise HTTPException(status_code=404, detail=str(exc) or "Board not found")
+    except ConflictError as exc:
+        raise HTTPException(status_code=409, detail=str(exc))
+    return _to_board(board)
+
+
 # --------------------------------------------------------------------------- #
 # Items (the polymorphic cards / docs / checklists)
 # --------------------------------------------------------------------------- #
@@ -229,6 +312,61 @@ async def delete_item(item_id: str, request: Request, claims: TokenClaims = Depe
 
 
 # --------------------------------------------------------------------------- #
+# Comments
+# --------------------------------------------------------------------------- #
+@app.get(
+    "/api/v1/workspace/items/{item_id}/comments",
+    response_model=list[CommentPublic],
+    tags=["comments"],
+)
+async def list_comments(item_id: str, request: Request, claims: TokenClaims = Depends(current_user)):
+    try:
+        rows = await repo(request).list_comments(item_id, claims.user_id)
+    except NotFound:
+        raise HTTPException(status_code=404, detail="Item not found")
+    return [_to_comment(c) for c in rows]
+
+
+@app.post(
+    "/api/v1/workspace/items/{item_id}/comments",
+    response_model=CommentPublic,
+    status_code=201,
+    tags=["comments"],
+)
+async def add_comment(
+    item_id: str,
+    body: CommentCreate,
+    request: Request,
+    claims: TokenClaims = Depends(current_user),
+):
+    try:
+        comment = await repo(request).add_comment(item_id, claims.user_id, body.body)
+    except NotFound:
+        raise HTTPException(status_code=404, detail="Item not found")
+    return _to_comment(comment)
+
+
+@app.delete(
+    "/api/v1/workspace/items/{item_id}/comments/{comment_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    tags=["comments"],
+)
+async def delete_comment(
+    item_id: str,
+    comment_id: str,
+    request: Request,
+    claims: TokenClaims = Depends(current_user),
+):
+    try:
+        await repo(request).delete_comment(item_id, comment_id, claims.user_id)
+    except NotFound:
+        raise HTTPException(status_code=404, detail="Comment not found")
+    except PermissionError:
+        raise HTTPException(status_code=403, detail="You can only delete your own comment")
+    return None
+
+
+# --------------------------------------------------------------------------- #
 # Helpers
 # --------------------------------------------------------------------------- #
 async def _emit(request: Request, event_type: EventType, item: dict, actor_id: str) -> None:
@@ -286,6 +424,22 @@ def _to_item(doc: dict) -> ItemPublic:
         assignees=doc["assignees"],
         tags=doc["tags"],
         due_date=doc.get("due_date"),
+        estimation_time=doc.get("estimation_time"),
+        start_date=doc.get("start_date"),
+        end_date=doc.get("end_date"),
+        # .get with a default so the 41 items created before this field existed
+        # still deserialise cleanly (they read back as priority 0 / "none").
+        priority=doc.get("priority", 0),
         created_by=doc["created_by"],
         updated_at=doc["updated_at"],
+    )
+
+
+def _to_comment(doc: dict) -> CommentPublic:
+    return CommentPublic(
+        id=doc["id"],
+        item_id=doc["item_id"],
+        user_id=doc["user_id"],
+        body=doc["body"],
+        created_at=doc["created_at"],
     )

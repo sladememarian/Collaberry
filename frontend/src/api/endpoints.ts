@@ -3,6 +3,7 @@ import { request } from "./client";
 import type {
   AppNotification,
   Board,
+  Comment,
   Item,
   ItemType,
   TokenResponse,
@@ -28,6 +29,18 @@ export const authApi = {
     }),
 
   me: () => request<UserPublic>("/api/v1/auth/me"),
+
+  // Members are added to a workspace by user id, but a human only knows an email;
+  // this resolves one to the other so the add-member flow can hand off to addMember.
+  userByEmail: (email: string) =>
+    request<UserPublic>(`/api/v1/auth/users/by-email?email=${encodeURIComponent(email)}`),
+
+  // Membership only stores user ids — this resolves a batch of them to display
+  // names/emails so an assignee picker can show people instead of raw ids.
+  usersByIds: (ids: string[]) =>
+    ids.length
+      ? request<UserPublic[]>(`/api/v1/auth/users/by-ids?ids=${encodeURIComponent(ids.join(","))}`)
+      : Promise.resolve([]),
 };
 
 // --- workspace-service ---------------------------------------------------- //
@@ -57,6 +70,29 @@ export const workspaceApi = {
 
   getBoard: (boardId: string) => request<Board>(`/api/v1/workspace/boards/${boardId}`),
 
+  addColumn: (boardId: string, name: string) =>
+    request<Board>(`/api/v1/workspace/boards/${boardId}/columns`, {
+      method: "POST",
+      body: { name },
+    }),
+
+  renameColumn: (boardId: string, columnId: string, name: string) =>
+    request<Board>(`/api/v1/workspace/boards/${boardId}/columns/${columnId}`, {
+      method: "PATCH",
+      body: { name },
+    }),
+
+  reorderColumns: (boardId: string, order: string[]) =>
+    request<Board>(`/api/v1/workspace/boards/${boardId}/columns/order`, {
+      method: "PUT",
+      body: { order },
+    }),
+
+  deleteColumn: (boardId: string, columnId: string) =>
+    request<Board>(`/api/v1/workspace/boards/${boardId}/columns/${columnId}`, {
+      method: "DELETE",
+    }),
+
   listItems: (boardId: string) =>
     request<Item[]>(`/api/v1/workspace/boards/${boardId}/items`),
 
@@ -70,6 +106,10 @@ export const workspaceApi = {
       assignees?: string[];
       tags?: string[];
       due_date?: string | null;
+      estimation_time?: number | null;
+      start_date?: string | null;
+      end_date?: string | null;
+      priority?: number;
     },
   ) =>
     request<Item>(`/api/v1/workspace/boards/${boardId}/items`, {
@@ -81,17 +121,36 @@ export const workspaceApi = {
     itemId: string,
     patch: Partial<{
       title: string;
+      type: ItemType;
       column_id: string;
       order: number;
       data: Record<string, unknown>;
       assignees: string[];
       tags: string[];
       due_date: string | null;
+      estimation_time: number | null;
+      start_date: string | null;
+      end_date: string | null;
+      priority: number;
     }>,
   ) => request<Item>(`/api/v1/workspace/items/${itemId}`, { method: "PATCH", body: patch }),
 
   deleteItem: (itemId: string) =>
     request<void>(`/api/v1/workspace/items/${itemId}`, { method: "DELETE" }),
+
+  listComments: (itemId: string) =>
+    request<Comment[]>(`/api/v1/workspace/items/${itemId}/comments`),
+
+  addComment: (itemId: string, body: string) =>
+    request<Comment>(`/api/v1/workspace/items/${itemId}/comments`, {
+      method: "POST",
+      body: { body },
+    }),
+
+  deleteComment: (itemId: string, commentId: string) =>
+    request<void>(`/api/v1/workspace/items/${itemId}/comments/${commentId}`, {
+      method: "DELETE",
+    }),
 };
 
 // --- presence-service (REST side; the socket is in realtime/) ------------- //
