@@ -18,7 +18,7 @@ import Animated, {
   withSpring,
   withTiming,
 } from "react-native-reanimated";
-import Svg, { Circle, Defs, Pattern, RadialGradient, Rect, Stop } from "react-native-svg";
+import Svg, { Circle, Defs, LinearGradient, Pattern, RadialGradient, Rect, Stop } from "react-native-svg";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { palette } from "@/theme/tokens";
@@ -27,20 +27,29 @@ interface Props {
   children: React.ReactNode;
   /** Skip the top safe-area pad when a screen renders its own header row. */
   edgeToEdge?: boolean;
+  /** "grid" (default) is the board's purple dot-grid + cursor glow; "aurora"
+   *  is a cooler, slower drifting backdrop used on the item detail screen. */
+  variant?: "grid" | "aurora";
 }
 
 const GRID_SPACING = 34;
 const GRID_DOT_RADIUS = 1.1;
 
-export function AppContainer({ children, edgeToEdge = false }: Props) {
+export function AppContainer({ children, edgeToEdge = false, variant = "grid" }: Props) {
   const insets = useSafeAreaInsets();
   return (
     <View className="flex-1 bg-ink-void" style={styles.root}>
       {/* Ambient backdrop — purely decorative, pointerEvents off so it never
           intercepts touches, mouse-wheel scroll, or drag gestures above it. */}
-      <View pointerEvents="none" style={StyleSheet.absoluteFill}>
-        <DotGrid />
-        <CursorGlow />
+      <View pointerEvents="none" style={StyleSheet.absoluteFill} testID={`app-backdrop-${variant}`}>
+        {variant === "aurora" ? (
+          <AuroraWaves />
+        ) : (
+          <>
+            <DotGrid />
+            <CursorGlow />
+          </>
+        )}
       </View>
 
       <View
@@ -181,6 +190,87 @@ function CursorGlow() {
           </RadialGradient>
         </Defs>
         <Circle cx={260} cy={260} r={260} fill="url(#cursorGlow)" />
+      </Svg>
+    </Animated.View>
+  );
+}
+
+// Cooler, distinct from the board's purple — blue/teal/cyan, calmer/editorial.
+const AURORA_BANDS = [
+  { top: "4%", height: 260, from: palette.blue, to: palette.cyan, duration: 15000, drift: 26 },
+  { top: "34%", height: 320, from: palette.cyan, to: palette.blueSoft, duration: 19000, drift: -32 },
+  { top: "62%", height: 280, from: palette.blueSoft, to: palette.blue, duration: 17000, drift: 22 },
+];
+
+/** Slow drifting translucent gradient bands — the item screen's distinct
+ *  backdrop. Each band drifts vertically on its own damped, staggered loop
+ *  (offset start delay + different duration) so they never move in lockstep,
+ *  reading as a calm aurora rather than a mechanical repeat. */
+function AuroraWaves() {
+  const isActive = useAppActive();
+  return (
+    <View style={StyleSheet.absoluteFill}>
+      {AURORA_BANDS.map((band, i) => (
+        <AuroraBand key={i} band={band} isActive={isActive} delay={i * 900} />
+      ))}
+    </View>
+  );
+}
+
+function AuroraBand({
+  band,
+  isActive,
+  delay,
+}: {
+  band: (typeof AURORA_BANDS)[number];
+  isActive: React.MutableRefObject<boolean>;
+  delay: number;
+}) {
+  const t = useSharedValue(0);
+
+  useEffect(() => {
+    const timeout = setTimeout(() => {
+      const loop = () => {
+        if (!isActive.current) return;
+        t.value = withTiming(
+          t.value === 0 ? 1 : 0,
+          { duration: band.duration, easing: Easing.inOut(Easing.sin) },
+          (finished) => {
+            if (finished) loop();
+          },
+        );
+      };
+      loop();
+    }, delay);
+    return () => {
+      clearTimeout(timeout);
+      cancelAnimation(t);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const style = useAnimatedStyle(() => ({
+    transform: [{ translateY: t.value * band.drift }],
+  }));
+
+  const gradId = `aurora-${band.from}-${band.to}`.replace(/[^a-zA-Z0-9]/g, "");
+
+  return (
+    <Animated.View
+      style={[
+        style,
+        { position: "absolute", top: band.top, left: 0, right: 0, height: band.height, opacity: 0.16 } as object,
+      ]}
+    >
+      <Svg width="100%" height="100%">
+        <Defs>
+          <LinearGradient id={gradId} x1="0%" y1="0%" x2="100%" y2="100%">
+            <Stop offset="0%" stopColor={band.from} stopOpacity={0.5} />
+            <Stop offset="55%" stopColor={band.to} stopOpacity={0.35} />
+            <Stop offset="100%" stopColor={band.from} stopOpacity={0} />
+          </LinearGradient>
+        </Defs>
+        <Rect x={0} y={0} width="100%" height="100%" fill={`url(#${gradId})`} />
       </Svg>
     </Animated.View>
   );
