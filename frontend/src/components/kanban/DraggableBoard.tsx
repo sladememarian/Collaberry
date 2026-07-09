@@ -23,7 +23,7 @@ import Animated, {
 import React, { useCallback, useMemo, useRef, useState } from "react";
 import { Pressable, ScrollView, Text, useWindowDimensions, View, type LayoutChangeEvent, type NativeSyntheticEvent, type NativeScrollEvent } from "react-native";
 
-import { DotGridIcon, PlusIcon } from "@/components/icons";
+import { DotGridIcon, PlusIcon, TrashIcon } from "@/components/icons";
 import { glow, palette, type WorkspaceContext } from "@/theme/tokens";
 import type { Board, Column, Item } from "@/types";
 
@@ -42,6 +42,8 @@ export interface DraggableBoardProps {
   onMoveCard: (itemId: string, toColumnId: string) => void;
   /** Persist a new left-to-right lane order (array of column ids). */
   onReorderColumns: (orderedIds: string[]) => void;
+  /** Delete this lane entirely (caller confirms + surfaces backend errors). */
+  onDeleteColumn: (column: Column) => void;
   /** Sort order */
   sortOrder?: 'created' | 'priority' | 'estimation';
 }
@@ -59,6 +61,7 @@ export function DraggableBoard({
   onAddColumn,
   onMoveCard,
   onReorderColumns,
+  onDeleteColumn,
   sortOrder = 'created',
 }: DraggableBoardProps) {
   const { width: screenW, height: screenH } = useWindowDimensions();
@@ -204,6 +207,7 @@ export function DraggableBoard({
           onCardPress={onCardPress}
           onAddCard={onAddCard}
           onMoveCard={onMoveCard}
+          onDeleteColumn={onDeleteColumn}
           onLaneFrame={setLaneFrame}
           onHoverColumn={setHoverColumn}
           onLaneDragStart={setDraggingLane}
@@ -245,6 +249,7 @@ interface ColumnProps {
   onCardPress: (item: Item) => void;
   onAddCard: (column: Column) => void;
   onMoveCard: (itemId: string, toColumnId: string) => void;
+  onDeleteColumn: (column: Column) => void;
   onLaneFrame: (id: string, x: number, w: number) => void;
   onHoverColumn: (id: string | null) => void;
   onLaneDragStart: (id: string | null) => void;
@@ -264,6 +269,7 @@ function DraggableColumn({
   onCardPress,
   onAddCard,
   onMoveCard,
+  onDeleteColumn,
   onLaneFrame,
   onHoverColumn,
   onLaneDragStart,
@@ -384,6 +390,15 @@ function DraggableColumn({
             </View>
           </View>
           <View className="flex-row items-center gap-0.5">
+            <Pressable
+              onPress={() => onDeleteColumn(column)}
+              hitSlop={8}
+              testID={`delete-column-${column.id}`}
+              className="h-7 w-7 items-center justify-center rounded-full bg-ink-raised"
+              accessibilityLabel={`Delete ${column.name}`}
+            >
+              <TrashIcon size={14} color={palette.textFaint} />
+            </Pressable>
             <Pressable
               onPress={() => onAddCard(column)}
               hitSlop={8}
