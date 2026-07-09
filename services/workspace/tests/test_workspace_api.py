@@ -295,3 +295,83 @@ async def test_switch_item_type_card_to_checklist(ctx):
     assert switched["data"]["entries"][0] == {"text": "step one", "done": False}
     assert switched["title"] == "morphs"  # untouched
 
+
+async def test_explicit_null_clears_estimation_and_dates(ctx):
+    alice = ctx.user("alice")
+    _, board = await _make_board(alice)
+    todo = board["columns"][0]["id"]
+    item = (await alice.post(
+        f"/api/v1/workspace/boards/{board['id']}/items",
+        json={
+            "type": "card",
+            "title": "planned",
+            "column_id": todo,
+            "estimation_time": 4.5,
+            "start_date": "2026-08-01T00:00:00Z",
+            "end_date": "2026-08-03T00:00:00Z",
+            "due_date": "2026-08-05T00:00:00Z",
+        },
+    )).json()
+
+    # Omitting a field must leave it untouched.
+    untouched = (await alice.patch(
+        f"/api/v1/workspace/items/{item['id']}", json={"title": "still planned"}
+    )).json()
+    assert untouched["estimation_time"] == 4.5
+    assert untouched["start_date"] is not None
+
+    # Explicitly sending null must clear it.
+    cleared = (await alice.patch(
+        f"/api/v1/workspace/items/{item['id']}",
+        json={"estimation_time": None, "start_date": None, "end_date": None, "due_date": None},
+    )).json()
+    assert cleared["estimation_time"] is None
+    assert cleared["start_date"] is None
+    assert cleared["end_date"] is None
+    assert cleared["due_date"] is None
+    assert cleared["title"] == "still planned"  # untouched
+
+
+async def test_comments_add_list_delete_own_only(ctx):
+    alice = ctx.user("alice")
+    bob = ctx.user("bob")
+    ws = (await alice.post(
+        "/api/v1/workspace/workspaces", json={"name": "Team", "context": "work"}
+    )).json()
+    board = (await alice.post(
+        f"/api/v1/workspace/workspaces/{ws['id']}/boards", json={"name": "Board"}
+    )).json()
+    await alice.post(
+        f"/api/v1/workspace/workspaces/{ws['id']}/members",
+        json={"user_id": "bob", "role": "editor"},
+    )
+    todo = board["columns"][0]["id"]
+    item = (await alice.post(
+        f"/api/v1/workspace/boards/{board['id']}/items",
+        json={"type": "card", "title": "discuss me", "column_id": todo},
+    )).json()
+
+    c1 = (await alice.post(
+        f"/api/v1/workspace/items/{item['id']}/comments", json={"body": "first"}
+    )).json()
+    assert c1["user_id"] == "alice"
+    assert c1["body"] == "first"
+
+    c2 = (await bob.post(
+        f"/api/v1/workspace/items/{item['id']}/comments", json={"body": "second"}
+    )).json()
+
+    listed = (await alice.get(f"/api/v1/workspace/items/{item['id']}/comments")).json()
+    assert [c["body"] for c in listed] == ["first", "second"]
+
+    # Bob cannot delete Alice's comment.
+    forbidden = await bob.delete(f"/api/v1/workspace/items/{item['id']}/comments/{c1['id']}")
+    assert forbidden.status_code == 403
+
+    # Bob can delete his own.
+    ok = await bob.delete(f"/api/v1/workspace/items/{item['id']}/comments/{c2['id']}")
+    assert ok.status_code == 204
+
+    remaining = (await alice.get(f"/api/v1/workspace/items/{item['id']}/comments")).json()
+    assert [c["id"] for c in remaining] == [c1["id"]]
+
