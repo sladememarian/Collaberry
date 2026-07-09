@@ -197,7 +197,6 @@ export default function ItemScreen() {
           />
 
           <TypeSwitcher value={item.type} readOnly={readOnly} onChange={changeType} />
-
           <PriorityPicker
             value={item.priority}
             readOnly={readOnly}
@@ -206,8 +205,41 @@ export default function ItemScreen() {
               persist({ priority });
             }}
           />
-
+          <View className="mt-4">
+            <Text className="mb-2 text-meta uppercase text-text-low">Assignees</Text>
+            <View className="flex-row gap-2">
+              <TextInput
+                editable={!readOnly}
+                defaultValue={item.assignees.join(", ")}
+                onChangeText={(t) => {
+                  const assignees = t.split(",").map((s) => s.trim()).filter(Boolean);
+                  persist({ assignees });
+                }}
+                placeholder="Enter user IDs separated by comma"
+                placeholderTextColor={palette.textFaint}
+                className="flex-1 rounded-md border border-ink-border bg-ink-surface/60 p-3 text-body text-text-mid"
+              />
+            </View>
+          </View>
+          <View className="flex-row gap-4">
+            <View className="flex-1">
+              <Text className="mb-2 text-meta uppercase text-text-low">Estimation (hours)</Text>
+              <TextInput
+                editable={!readOnly}
+                defaultValue={item.estimation_time?.toString() ?? ""}
+                onChangeText={(t) => {
+                  const estimation_time = parseFloat(t);
+                  if (!isNaN(estimation_time)) persist({ estimation_time });
+                }}
+                placeholder="0"
+                placeholderTextColor={palette.textFaint}
+                keyboardType="numeric"
+                className="rounded-md border border-ink-border bg-ink-surface/60 p-3 text-body text-text-mid"
+              />
+            </View>
+          </View>
           <View className="my-5 h-px bg-ink-border" />
+
 
           {item.type === "card" && <CardBody item={item} readOnly={readOnly} onChange={(desc) => persist({ data: { description: desc } })} />}
           {item.type === "checklist" && <ChecklistBody item={item} readOnly={readOnly} onChange={(entries) => persist({ data: { entries } })} />}
