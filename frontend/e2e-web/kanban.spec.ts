@@ -91,6 +91,59 @@ test("every lane renders a visible enclosed track, including empty ones", async 
   expect(trackBg, "empty lane should have a bordered, tinted track").not.toBeNull();
 });
 
+test("the sort control reorders cards within a lane for created/priority/estimation", async ({ page }) => {
+  await openLab(page);
+
+  // Read the visible order of "Code review task N" cards top-to-bottom by y position.
+  const codeReviewOrder = async () => {
+    const cards = await Promise.all(
+      [1, 2, 3].map(async (n) => {
+        const el = page.getByText(`Code review task ${n}`, { exact: true }).first();
+        const box = await el.boundingBox();
+        return { n, y: box?.y ?? 0 };
+      }),
+    );
+    return cards.sort((a, b) => a.y - b.y).map((c) => c.n);
+  };
+
+  // Default is "created" order — 1, 2, 3.
+  await expect(page.getByTestId("sort-created")).toBeVisible();
+  expect(await codeReviewOrder()).toEqual([1, 2, 3]);
+
+  // Seeded priority (task1=0, task2=2, task3=1) sorts descending to 2, 3, 1.
+  // Reordering animates via a damped spring (LinearTransition), so wait for
+  // it to settle before reading positions — a short wait reads a mid-flight
+  // layout and flakes.
+  await page.getByTestId("sort-priority").click();
+  await page.waitForTimeout(600);
+  expect(await codeReviewOrder()).toEqual([2, 3, 1]);
+
+  // Seeded estimation (task1=2, task2=1, task3=3) sorts descending to 3, 1, 2.
+  await page.getByTestId("sort-estimation").click();
+  await page.waitForTimeout(600);
+  expect(await codeReviewOrder()).toEqual([3, 1, 2]);
+
+  // Back to created restores the original order.
+  await page.getByTestId("sort-created").click();
+  await page.waitForTimeout(600);
+  expect(await codeReviewOrder()).toEqual([1, 2, 3]);
+});
+
+test("no leftover '< >' nudge controls exist on cards or lane headers", async ({ page }) => {
+  await openLab(page);
+
+  // The old (removed) affordance exposed accessible "Move lane left/right" and
+  // per-card move buttons. Neither should exist anywhere on the board now —
+  // reordering only happens via drag.
+  await expect(page.getByLabel(/move lane (left|right)/i)).toHaveCount(0);
+  await expect(page.getByLabel(/move card/i)).toHaveCount(0);
+
+  // No literal chevron glyphs ("<", ">", "‹", "›") should render as standalone
+  // pressable text anywhere on the board either.
+  const chevronTexts = await page.locator("text=/^[<>‹›]$/").count();
+  expect(chevronTexts).toBe(0);
+});
+
 test("a card can be dragged from one lane into another", async ({ page }) => {
   await openLab(page);
 
