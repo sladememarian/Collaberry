@@ -21,7 +21,17 @@ import {
 import { ApiError } from "@/api/client";
 import { presenceApi, workspaceApi } from "@/api/endpoints";
 import { AppContainer } from "@/components/AppContainer";
-import { ArrowLeftIcon, ChecklistIcon, CheckIcon, DocumentIcon, FlagIcon, KanbanIcon, LockIcon, PlusIcon, TrashIcon } from "@/components/icons";
+import {
+  ArrowLeftIcon,
+  ChecklistIcon,
+  CheckIcon,
+  DocumentIcon,
+  FlagIcon,
+  KanbanIcon,
+  LockIcon,
+  PlusIcon,
+  TrashIcon,
+} from "@/components/icons";
 import { Checkbox } from "@/components/editor/blocks/Checkbox";
 import {
   DocumentView,
@@ -30,15 +40,19 @@ import {
   type EditorBlock,
 } from "@/components/editor/DocumentView";
 import { authApi } from "@/api/endpoints";
+import { CommentsSection } from "@/components/item/CommentsSection";
+import { DateField } from "@/components/item/DateField";
+import { EstimationInput } from "@/components/item/EstimationInput";
 import { Avatar } from "@/components/ui/Avatar";
 import { ContextBadge } from "@/components/ui/Badge";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
+import { DatePickerDialog } from "@/components/ui/DatePickerDialog";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { GlassCard } from "@/components/ui/GlassCard";
 import { useAuth } from "@/context/AuthContext";
 import { palette } from "@/theme/tokens";
 import { PRIORITIES } from "@/theme/priority";
-import type { ChecklistData, ChecklistEntry, DocumentData, Item, ItemType, Member } from "@/types";
+import type { ChecklistData, ChecklistEntry, Comment, DocumentData, Item, ItemType, Member } from "@/types";
 
 type SaveState = "idle" | "saving" | "saved";
 
@@ -46,7 +60,7 @@ export default function ItemScreen() {
   const { id, boardId } = useLocalSearchParams<{ id: string; boardId?: string }>();
   const itemId = String(id);
   const router = useRouter();
-  const { user } = useAuth();
+  const { user, booting } = useAuth();
 
   const [item, setItem] = useState<Item | null>(null);
   const [loading, setLoading] = useState(true);
@@ -54,6 +68,8 @@ export default function ItemScreen() {
   const [lockedBy, setLockedBy] = useState<string | null>(null); // someone else's name
   const [save, setSave] = useState<SaveState>("idle");
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [datePicker, setDatePicker] = useState<"start" | "end" | null>(null);
+  const [comments, setComments] = useState<Comment[]>([]);
 
   // Workspace members, resolved to display names, so the assignee picker shows
   // people instead of raw ids. Best-effort: if this fails, the picker just stays empty.
@@ -72,6 +88,10 @@ export default function ItemScreen() {
 
   // --- load + lock -------------------------------------------------------- //
   useEffect(() => {
+    // The auth token is rehydrated from storage asynchronously on app boot;
+    // firing this before it lands races the client into sending requests with
+    // no JWT yet, which the user sees as a false "Jwt is missing" error.
+    if (booting) return;
     let released = false;
     (async () => {
       try {
@@ -93,6 +113,13 @@ export default function ItemScreen() {
           }
         } catch {
           /* assignee picker just shows nothing to pick — not worth failing the screen over */
+        }
+
+        // Best-effort: fetch comments. Not fatal if it fails — the section just stays empty.
+        try {
+          setComments(await workspaceApi.listComments(itemId));
+        } catch {
+          /* comments section just shows nothing — not worth failing the screen over */
         }
 
         // Best-effort lock. 423 => held by someone else; anything else, edit freely.
@@ -117,7 +144,7 @@ export default function ItemScreen() {
       presenceApi.releaseLock(itemId).catch(() => {});
       void released;
     };
-  }, [itemId, boardId]);
+  }, [itemId, boardId, booting]);
 
   // --- debounced persist -------------------------------------------------- //
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -167,7 +194,7 @@ export default function ItemScreen() {
 
   if (loading) {
     return (
-      <AppContainer>
+      <AppContainer variant="aurora">
         <View className="flex-1 items-center justify-center">
           <ActivityIndicator color={palette.purple} />
         </View>
@@ -177,7 +204,7 @@ export default function ItemScreen() {
 
   if (error || !item) {
     return (
-      <AppContainer>
+      <AppContainer variant="aurora">
         <Header onBack={goBack} save="idle" />
         <EmptyState title="Nothing to show" body={error ?? undefined} />
       </AppContainer>
@@ -185,7 +212,7 @@ export default function ItemScreen() {
   }
 
   return (
-    <AppContainer edgeToEdge>
+    <AppContainer edgeToEdge variant="aurora">
       <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : undefined} className="flex-1">
         {/* Delete is destructive and irreversible — confirm first ("are you sure?"
             card). A cross-platform dialog because Alert.alert is a no-op on web. */}
@@ -241,59 +268,100 @@ export default function ItemScreen() {
           />
           <View className="mt-4 flex-row gap-4">
             <View className="flex-1">
-              <Text className="mb-2 text-meta uppercase text-text-low">Estimation (hours)</Text>
-              <TextInput
-                editable={!readOnly}
-                defaultValue={item.estimation_time?.toString() ?? ""}
-                onChangeText={(t) => {
-                  if (t.trim() === "") return persist({ estimation_time: null });
-                  const estimation_time = parseFloat(t);
-                  if (!isNaN(estimation_time)) persist({ estimation_time });
-                }}
-                placeholder="0"
-                placeholderTextColor={palette.textFaint}
-                keyboardType="numeric"
-                className="rounded-md border border-ink-border bg-ink-surface/60 p-3 text-body text-text-mid"
+              <EstimationInput
+                readOnly={readOnly}
+                value={item.estimation_time}
+                onCommit={(estimation_time) => persist({ estimation_time })}
               />
             </View>
             <View className="flex-1">
               <Text className="mb-2 text-meta uppercase text-text-low">Start date</Text>
-              <TextInput
-                editable={!readOnly}
-                defaultValue={item.start_date ?? ""}
-                onChangeText={(t) => persist({ start_date: t.trim() || null })}
-                placeholder="YYYY-MM-DD"
-                placeholderTextColor={palette.textFaint}
-                className="rounded-md border border-ink-border bg-ink-surface/60 p-3 text-body text-text-mid"
+              <DateField
+                readOnly={readOnly}
+                value={item.start_date}
+                testID="start-date"
+                onPress={() => setDatePicker("start")}
               />
             </View>
             <View className="flex-1">
               <Text className="mb-2 text-meta uppercase text-text-low">End date</Text>
-              <TextInput
-                editable={!readOnly}
-                defaultValue={item.end_date ?? ""}
-                onChangeText={(t) => persist({ end_date: t.trim() || null })}
-                placeholder="YYYY-MM-DD"
-                placeholderTextColor={palette.textFaint}
-                className="rounded-md border border-ink-border bg-ink-surface/60 p-3 text-body text-text-mid"
+              <DateField
+                readOnly={readOnly}
+                value={item.end_date}
+                testID="end-date"
+                onPress={() => setDatePicker("end")}
               />
             </View>
           </View>
           <View className="my-5 h-px bg-ink-border" />
 
-
-          {item.type === "card" && <CardBody item={item} readOnly={readOnly} onChange={(desc) => persist({ data: { description: desc } })} />}
-          {item.type === "checklist" && <ChecklistBody item={item} readOnly={readOnly} onChange={(entries) => persist({ data: { entries } })} />}
-          {item.type === "document" && (
-            <DocumentBody
-              item={item}
-              currentUser={user?.display_name ?? "You"}
-              readOnly={readOnly}
-              onChange={(blocks) => persist({ data: { blocks } })}
-            />
+          {item.type === "card" ? (
+            <View className="flex-row gap-5">
+              <View className="flex-1">
+                <CardBody item={item} readOnly={readOnly} onChange={(desc) => persist({ data: { description: desc } })} />
+              </View>
+              <View className="flex-1">
+                <CommentsSection
+                  comments={comments}
+                  currentUserId={user?.id}
+                  names={memberNames}
+                  onAdd={async (body) => {
+                    const created = await workspaceApi.addComment(itemId, body);
+                    setComments((cur) => [...cur, created]);
+                  }}
+                  onDelete={async (commentId) => {
+                    await workspaceApi.deleteComment(itemId, commentId);
+                    setComments((cur) => cur.filter((c) => c.id !== commentId));
+                  }}
+                />
+              </View>
+            </View>
+          ) : (
+            <>
+              {item.type === "checklist" && <ChecklistBody item={item} readOnly={readOnly} onChange={(entries) => persist({ data: { entries } })} />}
+              {item.type === "document" && (
+                <DocumentBody
+                  item={item}
+                  currentUser={user?.display_name ?? "You"}
+                  readOnly={readOnly}
+                  onChange={(blocks) => persist({ data: { blocks } })}
+                />
+              )}
+              <View className="mt-5">
+                <CommentsSection
+                  comments={comments}
+                  currentUserId={user?.id}
+                  names={memberNames}
+                  onAdd={async (body) => {
+                    const created = await workspaceApi.addComment(itemId, body);
+                    setComments((cur) => [...cur, created]);
+                  }}
+                  onDelete={async (commentId) => {
+                    await workspaceApi.deleteComment(itemId, commentId);
+                    setComments((cur) => cur.filter((c) => c.id !== commentId));
+                  }}
+                />
+              </View>
+            </>
           )}
         </ScrollView>
       </KeyboardAvoidingView>
+
+      <DatePickerDialog
+        open={datePicker !== null}
+        value={datePicker === "start" ? item.start_date : item.end_date}
+        onSelect={(iso) => {
+          if (datePicker === "start") persist({ start_date: iso });
+          else if (datePicker === "end") persist({ end_date: iso });
+          setDatePicker(null);
+        }}
+        onClear={() => {
+          if (datePicker === "start") persist({ start_date: null });
+          else if (datePicker === "end") persist({ end_date: null });
+          setDatePicker(null);
+        }}
+        onClose={() => setDatePicker(null)}
+      />
 
       <ConfirmDialog
         open={confirmDelete}
