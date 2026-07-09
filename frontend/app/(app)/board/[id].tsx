@@ -18,6 +18,7 @@ import { DraggableBoard } from "@/components/kanban/DraggableBoard";
 import type { ColumnLocks } from "@/components/kanban/KanbanColumn";
 import { AvatarStack } from "@/components/ui/Avatar";
 import { Button } from "@/components/ui/Button";
+import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { ConnectionDot, EmptyState } from "@/components/ui/EmptyState";
 import { Sheet } from "@/components/ui/Sheet";
 import { TextField } from "@/components/ui/TextField";
@@ -38,6 +39,8 @@ export default function BoardScreen() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [sortOrder, setSortOrder] = useState<"created" | "priority" | "estimation">("created");
+  const [deleteTarget, setDeleteTarget] = useState<Column | null>(null);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
 
   // Robust back: a board opened via a deep link (or after the item modal ate the
   // history entry) leaves router.back() with nothing to pop on web — it no-ops
@@ -195,6 +198,10 @@ export default function BoardScreen() {
           onAddColumn={() => setAddColumnOpen(true)}
           onMoveCard={moveCard}
           onReorderColumns={reorderColumns}
+          onDeleteColumn={(col) => {
+            setDeleteError(null);
+            setDeleteTarget(col);
+          }}
           sortOrder={sortOrder}
         />
       )}
@@ -216,6 +223,30 @@ export default function BoardScreen() {
         onAdded={(updated) => {
           setBoard(updated);
           setAddColumnOpen(false);
+        }}
+      />
+
+      <ConfirmDialog
+        open={deleteTarget !== null}
+        title={deleteTarget ? `Delete "${deleteTarget.name}"?` : "Delete this lane?"}
+        message={deleteError ?? "This can't be undone."}
+        confirmLabel="Delete"
+        destructive
+        onCancel={() => {
+          setDeleteTarget(null);
+          setDeleteError(null);
+        }}
+        onConfirm={async () => {
+          if (!deleteTarget) return;
+          try {
+            const updated = await workspaceApi.deleteColumn(boardId, deleteTarget.id);
+            setBoard(updated);
+            setItems((prev) => prev.filter((it) => it.column_id !== deleteTarget.id));
+            setDeleteTarget(null);
+            setDeleteError(null);
+          } catch (e) {
+            setDeleteError(e instanceof ApiError ? e.message : "Couldn't delete this lane.");
+          }
         }}
       />
     </AppContainer>
