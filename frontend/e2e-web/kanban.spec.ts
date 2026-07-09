@@ -177,3 +177,17 @@ test("a card can be dragged from one lane into another", async ({ page }) => {
     expect(cardMid).toBeLessThan(codeReviewCol.x + codeReviewCol.width + 40);
   }
 });
+
+test("a lane can be deleted via its trash affordance and confirm dialog", async ({ page }) => {
+  await openLab(page);
+
+  await expect(page.getByText("Blocked", { exact: true }).first()).toBeVisible();
+
+  // "Blocked" (col-3) is the empty lane seeded in kanbanlab.tsx.
+  await page.getByTestId("delete-column-col-3").click();
+  await expect(page.getByText('Delete "Blocked"?')).toBeVisible();
+
+  await page.getByRole("button", { name: "Delete" }).click();
+
+  await expect(page.getByText("Blocked", { exact: true })).toHaveCount(0);
+});
