@@ -202,6 +202,9 @@ class WorkspaceRepository:
             "assignees": body.assignees,
             "tags": body.tags,
             "due_date": body.due_date,
+            "estimation_time": body.estimation_time,
+            "start_date": body.start_date,
+            "end_date": body.end_date,
             "priority": body.priority,
             "created_by": user_id,
             "updated_at": utcnow(),
@@ -239,6 +242,12 @@ class WorkspaceRepository:
             changes["tags"] = patch.tags
         if patch.due_date is not None:
             changes["due_date"] = patch.due_date
+        if patch.estimation_time is not None:
+            changes["estimation_time"] = patch.estimation_time
+        if patch.start_date is not None:
+            changes["start_date"] = patch.start_date
+        if patch.end_date is not None:
+            changes["end_date"] = patch.end_date
         if patch.priority is not None:
             changes["priority"] = patch.priority
         if patch.column_id is not None and patch.column_id != item["column_id"]:
