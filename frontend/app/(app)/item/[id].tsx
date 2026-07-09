@@ -29,6 +29,8 @@ import {
   toWireBlocks,
   type EditorBlock,
 } from "@/components/editor/DocumentView";
+import { authApi } from "@/api/endpoints";
+import { Avatar } from "@/components/ui/Avatar";
 import { ContextBadge } from "@/components/ui/Badge";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { EmptyState } from "@/components/ui/EmptyState";
@@ -36,7 +38,7 @@ import { GlassCard } from "@/components/ui/GlassCard";
 import { useAuth } from "@/context/AuthContext";
 import { palette } from "@/theme/tokens";
 import { PRIORITIES } from "@/theme/priority";
-import type { ChecklistData, ChecklistEntry, DocumentData, Item, ItemType } from "@/types";
+import type { ChecklistData, ChecklistEntry, DocumentData, Item, ItemType, Member } from "@/types";
 
 type SaveState = "idle" | "saving" | "saved";
 
@@ -52,6 +54,11 @@ export default function ItemScreen() {
   const [lockedBy, setLockedBy] = useState<string | null>(null); // someone else's name
   const [save, setSave] = useState<SaveState>("idle");
   const [confirmDelete, setConfirmDelete] = useState(false);
+
+  // Workspace members, resolved to display names, so the assignee picker shows
+  // people instead of raw ids. Best-effort: if this fails, the picker just stays empty.
+  const [members, setMembers] = useState<Member[]>([]);
+  const [memberNames, setMemberNames] = useState<Record<string, string>>({});
 
   const readOnly = Boolean(lockedBy);
 
@@ -73,6 +80,20 @@ export default function ItemScreen() {
         const found = items.find((i) => i.id === itemId) ?? null;
         if (!found) throw new ApiError(404, null, "This item no longer exists.");
         setItem(found);
+
+        // Best-effort: resolve the item's workspace members so the assignee picker
+        // can show real people. Not fatal if any step fails — picker just stays empty.
+        try {
+          const workspaces = await workspaceApi.list();
+          const ws = workspaces.find((w) => w.id === found.workspace_id);
+          if (ws) {
+            setMembers(ws.members);
+            const people = await authApi.usersByIds(ws.members.map((m) => m.user_id));
+            setMemberNames(Object.fromEntries(people.map((p) => [p.id, p.display_name])));
+          }
+        } catch {
+          /* assignee picker just shows nothing to pick — not worth failing the screen over */
+        }
 
         // Best-effort lock. 423 => held by someone else; anything else, edit freely.
         try {
@@ -205,35 +226,55 @@ export default function ItemScreen() {
               persist({ priority });
             }}
           />
-          <View className="mt-4">
-            <Text className="mb-2 text-meta uppercase text-text-low">Assignees</Text>
-            <View className="flex-row gap-2">
-              <TextInput
-                editable={!readOnly}
-                defaultValue={item.assignees.join(", ")}
-                onChangeText={(t) => {
-                  const assignees = t.split(",").map((s) => s.trim()).filter(Boolean);
-                  persist({ assignees });
-                }}
-                placeholder="Enter user IDs separated by comma"
-                placeholderTextColor={palette.textFaint}
-                className="flex-1 rounded-md border border-ink-border bg-ink-surface/60 p-3 text-body text-text-mid"
-              />
-            </View>
-          </View>
-          <View className="flex-row gap-4">
+          <AssigneePicker
+            members={members}
+            names={memberNames}
+            selected={item.assignees}
+            readOnly={readOnly}
+            onToggle={(userId) => {
+              const assignees = item.assignees.includes(userId)
+                ? item.assignees.filter((id) => id !== userId)
+                : [...item.assignees, userId];
+              setItem((cur) => (cur ? { ...cur, assignees } : cur));
+              persist({ assignees });
+            }}
+          />
+          <View className="mt-4 flex-row gap-4">
             <View className="flex-1">
               <Text className="mb-2 text-meta uppercase text-text-low">Estimation (hours)</Text>
               <TextInput
                 editable={!readOnly}
                 defaultValue={item.estimation_time?.toString() ?? ""}
                 onChangeText={(t) => {
+                  if (t.trim() === "") return persist({ estimation_time: null });
                   const estimation_time = parseFloat(t);
                   if (!isNaN(estimation_time)) persist({ estimation_time });
                 }}
                 placeholder="0"
                 placeholderTextColor={palette.textFaint}
                 keyboardType="numeric"
+                className="rounded-md border border-ink-border bg-ink-surface/60 p-3 text-body text-text-mid"
+              />
+            </View>
+            <View className="flex-1">
+              <Text className="mb-2 text-meta uppercase text-text-low">Start date</Text>
+              <TextInput
+                editable={!readOnly}
+                defaultValue={item.start_date ?? ""}
+                onChangeText={(t) => persist({ start_date: t.trim() || null })}
+                placeholder="YYYY-MM-DD"
+                placeholderTextColor={palette.textFaint}
+                className="rounded-md border border-ink-border bg-ink-surface/60 p-3 text-body text-text-mid"
+              />
+            </View>
+            <View className="flex-1">
+              <Text className="mb-2 text-meta uppercase text-text-low">End date</Text>
+              <TextInput
+                editable={!readOnly}
+                defaultValue={item.end_date ?? ""}
+                onChangeText={(t) => persist({ end_date: t.trim() || null })}
+                placeholder="YYYY-MM-DD"
+                placeholderTextColor={palette.textFaint}
                 className="rounded-md border border-ink-border bg-ink-surface/60 p-3 text-body text-text-mid"
               />
             </View>
@@ -383,6 +424,57 @@ function PriorityPicker({
           );
         })}
       </View>
+    </View>
+  );
+}
+
+// --------------------------------------------------------------------------- //
+/** Tap-to-toggle picker of the item's assignees, drawn from the board's workspace members. */
+function AssigneePicker({
+  members,
+  names,
+  selected,
+  readOnly,
+  onToggle,
+}: {
+  members: Member[];
+  names: Record<string, string>;
+  selected: string[];
+  readOnly: boolean;
+  onToggle: (userId: string) => void;
+}) {
+  return (
+    <View className="mt-4">
+      <Text className="mb-2 text-meta uppercase text-text-low">Assignees</Text>
+      {members.length === 0 ? (
+        <Text className="text-sub text-text-faint">No workspace members to assign.</Text>
+      ) : (
+        <View className="gap-1.5">
+          {members.map((m) => {
+            const on = selected.includes(m.user_id);
+            const name = names[m.user_id] ?? "Member";
+            return (
+              <Pressable
+                key={m.user_id}
+                disabled={readOnly}
+                onPress={() => onToggle(m.user_id)}
+                className="flex-row items-center gap-3 rounded-md border px-3 py-2"
+                style={{
+                  borderColor: on ? palette.purple : palette.border,
+                  backgroundColor: on ? "rgba(168,85,247,0.10)" : "transparent",
+                  opacity: readOnly ? 0.5 : 1,
+                }}
+              >
+                <Avatar name={name} id={m.user_id} size={26} />
+                <Text className="flex-1 text-sub font-medium" style={{ color: on ? palette.purpleSoft : palette.textMid }}>
+                  {name}
+                </Text>
+                {on ? <CheckIcon size={15} color={palette.purpleSoft} /> : null}
+              </Pressable>
+            );
+          })}
+        </View>
+      )}
     </View>
   );
 }
