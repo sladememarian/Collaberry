@@ -214,6 +214,35 @@ export function DotGridIcon({ size = 20, color = palette.textLow }: IconProps) {
   );
 }
 
+export function QuestionIcon({ size = 16, color = palette.textLow, strokeWidth = 2 }: IconProps) {
+  return (
+    <Svg {...base(size)}>
+      <Circle cx="12" cy="12" r="9" {...stroke(color, strokeWidth)} />
+      <Path d="M9.2 9.5a2.8 2.8 0 0 1 5.4 1c0 1.8-2.6 1.9-2.6 3.8" {...stroke(color, strokeWidth)} />
+      <Circle cx="12" cy="17.2" r="1" fill={color} />
+    </Svg>
+  );
+}
+
+export function SendIcon({ size = 18, color = palette.textHi, strokeWidth = 2 }: IconProps) {
+  return (
+    <Svg {...base(size)}>
+      <Path d="M4 20l17-8L4 4l0 6.5L15 12 4 13.5z" {...stroke(color, strokeWidth)} />
+    </Svg>
+  );
+}
+
+export function CalendarIcon({ size = 18, color = palette.textHi, strokeWidth = 2 }: IconProps) {
+  return (
+    <Svg {...base(size)}>
+      <Rect x="3.5" y="5" width="17" height="16" rx="2.2" {...stroke(color, strokeWidth)} />
+      <Line x1="3.5" y1="9.5" x2="20.5" y2="9.5" {...stroke(color, strokeWidth)} />
+      <Line x1="8" y1="3" x2="8" y2="7" {...stroke(color, strokeWidth)} />
+      <Line x1="16" y1="3" x2="16" y2="7" {...stroke(color, strokeWidth)} />
+    </Svg>
+  );
+}
+
 /** The Collaberry mark — two interlocking rings, purple→blue. */
 export function BrandMark({ size = 34 }: { size?: number }) {
   return (
