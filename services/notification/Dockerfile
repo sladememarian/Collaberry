@@ -4,7 +4,7 @@ ENV PYTHONUNBUFFERED=1 PYTHONDONTWRITEBYTECODE=1
 WORKDIR /app
 
 COPY common /app/common
-RUN pip install --no-cache-dir ./common
+RUN pip install --no-cache-dir -e ./common
 
 COPY notification/requirements.txt /app/notification/requirements.txt
 RUN pip install --no-cache-dir -r /app/notification/requirements.txt
