@@ -90,6 +90,44 @@ async def test_item_priority_defaults_sets_and_updates(ctx):
     assert patched["title"] == "no prio"  # untouched
 
 
+async def test_item_estimation_and_dates_set_and_updated(ctx):
+    alice = ctx.user("alice")
+    _, board = await _make_board(alice)
+    todo = board["columns"][0]["id"]
+
+    # None of the three are required — omitted means null.
+    bare = (await alice.post(
+        f"/api/v1/workspace/boards/{board['id']}/items",
+        json={"type": "card", "title": "bare", "column_id": todo},
+    )).json()
+    assert bare["estimation_time"] is None
+    assert bare["start_date"] is None
+    assert bare["end_date"] is None
+
+    # Settable at creation.
+    planned = (await alice.post(
+        f"/api/v1/workspace/boards/{board['id']}/items",
+        json={
+            "type": "card",
+            "title": "planned",
+            "column_id": todo,
+            "estimation_time": 4.5,
+            "start_date": "2026-08-01T00:00:00Z",
+            "end_date": "2026-08-03T00:00:00Z",
+        },
+    )).json()
+    assert planned["estimation_time"] == 4.5
+    assert planned["start_date"].startswith("2026-08-01")
+    assert planned["end_date"].startswith("2026-08-03")
+
+    # And updatable later via PATCH, without disturbing other fields.
+    patched = (await alice.patch(
+        f"/api/v1/workspace/items/{bare['id']}", json={"estimation_time": 2}
+    )).json()
+    assert patched["estimation_time"] == 2
+    assert patched["title"] == "bare"
+
+
 async def test_item_priority_out_of_range_is_rejected(ctx):
     alice = ctx.user("alice")
     _, board = await _make_board(alice)
