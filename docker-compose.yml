@@ -26,6 +26,15 @@ services:
     <<: *service-base
     volumes:
       - mongo-data:/data/db
+    ports:
+      # Dev-only convenience so MongoDB Compass (or mongosh) on the host can
+      # inspect data directly. Bound to loopback only — not reachable from the
+      # network. Nothing inside the stack uses this; services talk to `mongo`
+      # over the internal nexus-net network regardless.
+      # NOTE: host port is 27018, not the default 27017 — this machine already
+      # has an unrelated Mongo container bound to 27017 (a different database;
+      # that's why Compass on the default port never showed Collaberry's data).
+      - "127.0.0.1:27018:27017"
     healthcheck:
       test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping').ok"]
       interval: 5s
