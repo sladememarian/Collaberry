@@ -96,6 +96,10 @@ export interface Item {
   assignees: string[];
   tags: string[];
   due_date: string | null;
+  /** Hours, freeform estimate — not required. */
+  estimation_time: number | null;
+  start_date: string | null;
+  end_date: string | null;
   /** 0 none · 1 low · 2 medium · 3 high. */
   priority: number;
   created_by: string;

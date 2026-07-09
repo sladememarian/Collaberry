@@ -33,6 +33,13 @@ export const authApi = {
   // this resolves one to the other so the add-member flow can hand off to addMember.
   userByEmail: (email: string) =>
     request<UserPublic>(`/api/v1/auth/users/by-email?email=${encodeURIComponent(email)}`),
+
+  // Membership only stores user ids — this resolves a batch of them to display
+  // names/emails so an assignee picker can show people instead of raw ids.
+  usersByIds: (ids: string[]) =>
+    ids.length
+      ? request<UserPublic[]>(`/api/v1/auth/users/by-ids?ids=${encodeURIComponent(ids.join(","))}`)
+      : Promise.resolve([]),
 };
 
 // --- workspace-service ---------------------------------------------------- //
@@ -98,6 +105,9 @@ export const workspaceApi = {
       assignees?: string[];
       tags?: string[];
       due_date?: string | null;
+      estimation_time?: number | null;
+      start_date?: string | null;
+      end_date?: string | null;
       priority?: number;
     },
   ) =>
@@ -117,6 +127,9 @@ export const workspaceApi = {
       assignees: string[];
       tags: string[];
       due_date: string | null;
+      estimation_time: number | null;
+      start_date: string | null;
+      end_date: string | null;
       priority: number;
     }>,
   ) => request<Item>(`/api/v1/workspace/items/${itemId}`, { method: "PATCH", body: patch }),
