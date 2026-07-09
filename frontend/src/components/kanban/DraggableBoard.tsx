@@ -585,29 +585,9 @@ function DraggableCard({
             onPress={dragging ? undefined : onPress}
           />
           {/* Quick, guaranteed cross-lane move (works without dragging). */}
-          <View className="mt-[-6px] mb-1.5 flex-row justify-end gap-1 px-1">
-            <CardNudge disabled={!prevColumnId} rotate onPress={() => prevColumnId && onMoveCard(item.id, prevColumnId)} />
-            <CardNudge disabled={!nextColumnId} onPress={() => nextColumnId && onMoveCard(item.id, nextColumnId)} />
-          </View>
         </Animated.View>
       </Animated.View>
     </GestureDetector>
-  );
-}
+    );
+    }
 
-function CardNudge({ onPress, disabled, rotate }: { onPress: () => void; disabled?: boolean; rotate?: boolean }) {
-  return (
-    <Pressable
-      onPress={disabled ? undefined : onPress}
-      disabled={disabled}
-      hitSlop={6}
-      className="h-6 w-6 items-center justify-center rounded-md bg-ink-raised/70"
-      style={{ opacity: disabled ? 0.2 : 0.9 }}
-      accessibilityLabel={rotate ? "Move card to previous lane" : "Move card to next lane"}
-    >
-      <View style={{ transform: [{ rotate: rotate ? "180deg" : "0deg" }] }}>
-        <ChevronRightIcon size={13} color={palette.textMid} />
-      </View>
-    </Pressable>
-  );
-}
