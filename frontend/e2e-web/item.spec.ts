@@ -104,6 +104,8 @@ test("comments can be added, viewed, and only the current user's own comment can
   const ownDeleteId = ownId!.replace("comment-", "comment-delete-");
   await page.getByTestId(ownDeleteId).click();
   await expect(page.getByText("Delete this comment?")).toBeVisible();
-  await page.getByRole("button", { name: "Delete" }).click();
+  // Exact match: the trash affordance is now labelled "Delete comment", so a
+  // substring "Delete" would also match it — target the dialog's button exactly.
+  await page.getByRole("button", { name: "Delete", exact: true }).click();
   await expect(page.getByText("Fixed, thanks!")).toHaveCount(0);
 });

@@ -278,7 +278,7 @@ function BoardHeader({
 }) {
   return (
     <View className="flex-row items-center gap-3 border-b border-ink-border/60 px-4 pb-3 pt-1">
-      <Pressable onPress={onBack} hitSlop={8} className="h-9 w-9 items-center justify-center rounded-full bg-ink-raised">
+      <Pressable onPress={onBack} hitSlop={8} accessibilityRole="button" accessibilityLabel="Go back" className="h-9 w-9 items-center justify-center rounded-full bg-ink-raised">
         <ArrowLeftIcon size={20} color={palette.textHi} />
       </Pressable>
       <View className="flex-1">

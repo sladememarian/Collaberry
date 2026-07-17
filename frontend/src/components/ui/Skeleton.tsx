@@ -16,6 +16,8 @@ import Animated, {
   withTiming,
 } from "react-native-reanimated";
 
+import { useReducedMotion } from "@/hooks/useReducedMotion";
+
 export function Skeleton({
   width = "100%",
   height = 16,
@@ -28,15 +30,23 @@ export function Skeleton({
   style?: ViewStyle;
 }) {
   const progress = useSharedValue(0);
+  const reducedMotion = useReducedMotion();
 
   useEffect(() => {
+    if (reducedMotion) {
+      // Hold a still, faintly-lit block instead of sweeping — the placeholder
+      // still reads as "loading" without the motion.
+      cancelAnimation(progress);
+      progress.value = 0.5;
+      return;
+    }
     progress.value = withRepeat(
       withTiming(1, { duration: 1200, easing: Easing.inOut(Easing.ease) }),
       -1,
       false,
     );
     return () => cancelAnimation(progress);
-  }, [progress]);
+  }, [progress, reducedMotion]);
 
   const sweep = useAnimatedStyle(() => ({
     // Slide a soft highlight band from left to right across the block.

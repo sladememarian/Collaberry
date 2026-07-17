@@ -71,6 +71,8 @@ export function CommentsSection({
                       <Pressable
                         onPress={() => setPendingDelete(c.id)}
                         hitSlop={6}
+                        accessibilityRole="button"
+                        accessibilityLabel="Delete comment"
                         testID={`comment-delete-${c.id}`}
                       >
                         <TrashIcon size={13} color={palette.textFaint} />
