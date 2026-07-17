@@ -12,7 +12,9 @@ import { ContextBadge, TagChip } from "@/components/ui/Badge";
 import { GlassCard } from "@/components/ui/GlassCard";
 import { priorityMeta } from "@/theme/priority";
 import { contextAccent, palette, type WorkspaceContext } from "@/theme/tokens";
-import type { ChecklistData, Item } from "@/types";
+import type { CardData, ChecklistData, Item } from "@/types";
+
+import { useDensity } from "./density";
 
 const CONTEXTS: WorkspaceContext[] = ["work", "university", "personal"];
 
@@ -53,26 +55,33 @@ interface Props {
 }
 
 function TaskCardBase({ item, workspaceContext, lockedByName, onPress }: Props) {
+  const density = useDensity();
   const ctx = cardContext(item, workspaceContext);
   const accent = contextAccent[ctx];
   const progress = checklistProgress(item);
   const due = dueLabel(item.due_date);
   const locked = Boolean(lockedByName);
+  const compact = density === "compact";
+  const description =
+    density === "expanded" && item.type === "card"
+      ? (item.data as CardData)?.description?.trim() || null
+      : null;
 
   return (
     <GlassCard
       onPress={() => onPress?.(item)}
       glowColor={locked ? palette.purple : undefined}
-      className="mb-2.5 p-3"
+      className={compact ? "mb-2 p-2.5" : "mb-2.5 p-3"}
       style={locked ? { borderColor: palette.purple } : undefined}
+      testID={`task-card-${item.id}`}
     >
       {/* Accent hairline strip on the left edge for quick scanning. */}
       <View
         style={{ backgroundColor: accent.color }}
-        className="absolute left-0 top-3 h-8 w-1 rounded-r"
+        className={`absolute left-0 rounded-r ${compact ? "top-2.5 h-6 w-1" : "top-3 h-8 w-1"}`}
       />
 
-      <View className="mb-2 flex-row items-center justify-between">
+      <View className={`flex-row items-center justify-between ${compact ? "mb-1" : "mb-2"}`}>
         <View className="flex-row items-center gap-1.5">
           <TypeGlyph type={item.type} color={accent.color} />
           <ContextBadge context={ctx} />
@@ -88,63 +97,122 @@ function TaskCardBase({ item, workspaceContext, lockedByName, onPress }: Props) 
         ) : null}
       </View>
 
-      <Text className="text-body font-semibold text-text-hi" numberOfLines={2}>
+      <Text
+        className={`font-semibold text-text-hi ${compact ? "text-sub" : "text-body"}`}
+        numberOfLines={compact ? 1 : 2}
+      >
         {item.title}
       </Text>
 
-      {progress ? (
-        <View className="mt-2.5">
-          <View className="h-1.5 w-full overflow-hidden rounded-full bg-ink-raised">
-            <View
-              className="h-full rounded-full"
-              style={{
-                width: `${progress.total ? (progress.done / progress.total) * 100 : 0}%`,
-                backgroundColor: accent.color,
-              }}
-            />
-          </View>
-          <Text className="mt-1 text-meta text-text-low">
-            {progress.done}/{progress.total} done
-          </Text>
-        </View>
+      {description ? (
+        <Text className="mt-1.5 text-sub text-text-low" numberOfLines={2}>
+          {description}
+        </Text>
       ) : null}
 
-      {item.tags.length ? (
-        <View className="mt-2.5 flex-row flex-wrap gap-1.5">
-          {item.tags
-            .filter((t) => !CONTEXTS.includes(t.toLowerCase() as WorkspaceContext))
-            .slice(0, 3)
-            .map((t) => (
-              <TagChip key={t} label={t} />
-            ))}
-        </View>
-      ) : null}
-
-      {(item.assignees.length > 0 || due) && (
-        <View className="mt-3 flex-row items-center justify-between">
-          <View className="flex-row">
-            {item.assignees.slice(0, 3).map((a, i) => (
-              <View key={a} style={{ marginLeft: i === 0 ? 0 : -8 }}>
-                <Avatar name={a} id={a} size={22} />
+      {/* Compact mode collapses everything below the title into one thin meta
+          line — just the signal (progress count, assignee count, due), no chrome. */}
+      {compact ? (
+        <CompactMeta
+          progress={progress}
+          assignees={item.assignees.length}
+          due={due}
+          accent={accent.color}
+        />
+      ) : (
+        <>
+          {progress ? (
+            <View className="mt-2.5">
+              <View className="h-1.5 w-full overflow-hidden rounded-full bg-ink-raised">
+                <View
+                  className="h-full rounded-full"
+                  style={{
+                    width: `${progress.total ? (progress.done / progress.total) * 100 : 0}%`,
+                    backgroundColor: accent.color,
+                  }}
+                />
               </View>
-            ))}
-          </View>
-          {due ? (
-            <View
-              className="rounded-sm px-2 py-0.5"
-              style={{ backgroundColor: due.overdue ? "rgba(248,113,113,0.14)" : "rgba(255,255,255,0.05)" }}
-            >
-              <Text
-                className="text-meta"
-                style={{ color: due.overdue ? palette.danger : palette.textLow }}
-              >
-                {due.text}
+              <Text className="mt-1 text-meta text-text-low">
+                {progress.done}/{progress.total} done
               </Text>
             </View>
           ) : null}
-        </View>
+
+          {item.tags.length ? (
+            <View className="mt-2.5 flex-row flex-wrap gap-1.5">
+              {item.tags
+                .filter((t) => !CONTEXTS.includes(t.toLowerCase() as WorkspaceContext))
+                .slice(0, 3)
+                .map((t) => (
+                  <TagChip key={t} label={t} />
+                ))}
+            </View>
+          ) : null}
+
+          {(item.assignees.length > 0 || due) && (
+            <View className="mt-3 flex-row items-center justify-between">
+              <View className="flex-row">
+                {item.assignees.slice(0, 3).map((a, i) => (
+                  <View key={a} style={{ marginLeft: i === 0 ? 0 : -8 }}>
+                    <Avatar name={a} id={a} size={22} />
+                  </View>
+                ))}
+              </View>
+              {due ? (
+                <View
+                  className="rounded-sm px-2 py-0.5"
+                  style={{ backgroundColor: due.overdue ? "rgba(248,113,113,0.14)" : "rgba(255,255,255,0.05)" }}
+                >
+                  <Text
+                    className="text-meta"
+                    style={{ color: due.overdue ? palette.danger : palette.textLow }}
+                  >
+                    {due.text}
+                  </Text>
+                </View>
+              ) : null}
+            </View>
+          )}
+        </>
       )}
     </GlassCard>
+  );
+}
+
+/** One thin line of signal for compact cards: progress · assignees · due. */
+function CompactMeta({
+  progress,
+  assignees,
+  due,
+  accent,
+}: {
+  progress: { done: number; total: number } | null;
+  assignees: number;
+  due: { text: string; overdue: boolean } | null;
+  accent: string;
+}) {
+  if (!progress && assignees === 0 && !due) return null;
+  return (
+    <View className="mt-1.5 flex-row items-center gap-2.5">
+      {progress ? (
+        <Text className="text-meta" style={{ color: accent }}>
+          {progress.done}/{progress.total}
+        </Text>
+      ) : null}
+      {assignees > 0 ? (
+        <Text className="text-meta text-text-low">
+          {assignees} {assignees === 1 ? "person" : "people"}
+        </Text>
+      ) : null}
+      {due ? (
+        <Text
+          className="text-meta"
+          style={{ color: due.overdue ? palette.danger : palette.textLow }}
+        >
+          {due.text}
+        </Text>
+      ) : null}
+    </View>
   );
 }
 

@@ -9,7 +9,11 @@
       "distribution": "internal"
     },
     "preview": {
-      "distribution": "internal"
+      "distribution": "internal",
+      "env": {
+        "EXPO_PUBLIC_API_URL": "https://8088-26f0e993-32b4-45f2-af64-a392bee6cc43.daytonaproxy01.eu",
+        "EXPO_PUBLIC_WS_URL": "wss://8088-26f0e993-32b4-45f2-af64-a392bee6cc43.daytonaproxy01.eu"
+      }
     },
     "production": {
       "autoIncrement": true

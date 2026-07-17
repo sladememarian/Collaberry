@@ -132,7 +132,7 @@ export default function ItemScreen() {
           }
         }
       } catch (e) {
-        setError(e instanceof ApiError ? e.message : "Couldn't open this item.");
+        setError(e instanceof ApiError ? e.message : "Couldn't open this item. Check your connection and try again.");
       } finally {
         setLoading(false);
       }
@@ -564,13 +564,13 @@ function Header({
 }) {
   return (
     <View className="flex-row items-center justify-between px-4 pb-2 pt-3">
-      <Pressable onPress={onBack} hitSlop={8} className="h-9 w-9 items-center justify-center rounded-full bg-ink-raised">
+      <Pressable onPress={onBack} hitSlop={8} accessibilityRole="button" accessibilityLabel="Go back" className="h-9 w-9 items-center justify-center rounded-full bg-ink-raised">
         <ArrowLeftIcon size={20} color={palette.textHi} />
       </Pressable>
       <View className="flex-row items-center gap-3">
         <SaveBadge state={save} />
         {onDelete ? (
-          <Pressable onPress={onDelete} hitSlop={8} className="h-9 w-9 items-center justify-center rounded-full bg-ink-raised">
+          <Pressable onPress={onDelete} hitSlop={8} accessibilityRole="button" accessibilityLabel="Delete this item" className="h-9 w-9 items-center justify-center rounded-full bg-ink-raised">
             <TrashIcon size={17} color={palette.textMid} />
           </Pressable>
         ) : null}

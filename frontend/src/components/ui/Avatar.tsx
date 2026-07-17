@@ -22,11 +22,12 @@ export function Avatar({
   id,
   size = 30,
 }: {
-  name: string;
-  id?: string;
+  name?: string | null;
+  id?: string | null;
   size?: number;
 }) {
-  const color = tintFor(id ?? name);
+  const label = (name ?? "").trim() || (id ?? "").trim() || "?";
+  const color = tintFor(id?.trim() || label);
   return (
     <View
       style={{
@@ -39,7 +40,7 @@ export function Avatar({
       }}
       className="items-center justify-center"
     >
-      <Text style={{ color, fontSize: size * 0.36, fontWeight: "700" }}>{initials(name)}</Text>
+      <Text style={{ color, fontSize: size * 0.36, fontWeight: "700" }}>{initials(label)}</Text>
     </View>
   );
 }

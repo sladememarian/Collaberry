@@ -2,8 +2,8 @@
   "expo": {
     "name": "Collaberry",
     "slug": "collaberry",
-    "version": "1.0.0",
-    "orientation": "portrait",
+    "version": "1.0.1",
+    "orientation": "default",
     "icon": "./assets/icon.png",
     "primaryColor": "#0A0A0C",
     "userInterfaceStyle": "dark",
@@ -18,14 +18,24 @@
     ],
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.collaberry.app"
+      "bundleIdentifier": "com.collaberry.app",
+      "infoPlist": {
+        "NSAppTransportSecurity": {
+          "NSAllowsLocalNetworking": true
+        }
+      }
     },
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#0A0A0C"
       },
-      "package": "com.collaberry.app"
+      "package": "com.collaberry.app",
+      "usesCleartextTraffic": true,
+      "permissions": [
+        "INTERNET",
+        "ACCESS_NETWORK_STATE"
+      ]
     },
     "web": {
       "favicon": "./assets/favicon.png",
@@ -36,14 +46,22 @@
       "expo-secure-store",
       "expo-status-bar",
       "expo-splash-screen",
-      "expo-localization"
+      "expo-localization",
+      [
+        "expo-build-properties",
+        {
+          "android": {
+            "usesCleartextTraffic": true
+          }
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true
     },
     "extra": {
-      "apiBaseUrl": "http://localhost:8088",
-      "wsBaseUrl": "ws://localhost:8088",
+      "apiBaseUrl": "https://8088-26f0e993-32b4-45f2-af64-a392bee6cc43.daytonaproxy01.eu",
+      "wsBaseUrl": "wss://8088-26f0e993-32b4-45f2-af64-a392bee6cc43.daytonaproxy01.eu",
       "router": {},
       "eas": {
         "projectId": "441cf83e-e43e-41f2-b4e1-863c33ff121c"

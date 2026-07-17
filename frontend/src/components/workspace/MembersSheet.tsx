@@ -75,7 +75,7 @@ export function MembersSheet({
       if (e instanceof ApiError && e.status === 404) {
         setError("No one is registered with that email yet.");
       } else {
-        setError(e instanceof ApiError ? e.message : "Couldn't add them.");
+        setError(e instanceof ApiError ? e.message : "Couldn't add that member. Check the email and try again.");
       }
     } finally {
       setBusy(false);

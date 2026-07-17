@@ -31,7 +31,7 @@ export function Sheet({
             <View className="mb-4 flex-row items-center justify-between">
               <View className="h-1 w-10 self-center rounded-full bg-ink-hair" style={{ position: "absolute", left: "50%", marginLeft: -20, top: -2 }} />
               <Text className="text-h2 font-semibold text-text-hi">{title}</Text>
-              <Pressable onPress={onClose} hitSlop={10} className="h-8 w-8 items-center justify-center rounded-full bg-ink-raised">
+              <Pressable onPress={onClose} hitSlop={10} accessibilityRole="button" accessibilityLabel="Close" className="h-8 w-8 items-center justify-center rounded-full bg-ink-raised">
                 <CloseIcon size={18} color={palette.textMid} />
               </Pressable>
             </View>

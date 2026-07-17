@@ -15,6 +15,11 @@ import { workspaceApi } from "@/api/endpoints";
 import { AppContainer } from "@/components/AppContainer";
 import { ArrowLeftIcon, ChecklistIcon, DocumentIcon, KanbanIcon } from "@/components/icons";
 import { DraggableBoard } from "@/components/kanban/DraggableBoard";
+import {
+  DensityControl,
+  DensityProvider,
+  usePersistedDensity,
+} from "@/components/kanban/density";
 import type { ColumnLocks } from "@/components/kanban/KanbanColumn";
 import { AvatarStack } from "@/components/ui/Avatar";
 import { Button } from "@/components/ui/Button";
@@ -39,6 +44,7 @@ export default function BoardScreen() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [sortOrder, setSortOrder] = useState<"created" | "priority" | "estimation">("created");
+  const [density, setDensity] = usePersistedDensity();
   const [deleteTarget, setDeleteTarget] = useState<Column | null>(null);
   const [deleteError, setDeleteError] = useState<string | null>(null);
 
@@ -99,7 +105,7 @@ export default function BoardScreen() {
       const ws = wss.find((w) => w.id === b.workspace_id);
       if (ws) setContext(ws.context);
     } catch (e) {
-      setError(e instanceof ApiError ? e.message : "Couldn't open this board.");
+      setError(e instanceof ApiError ? e.message : "Couldn't open this board. Check your connection and try again.");
     } finally {
       setLoading(false);
     }
@@ -176,7 +182,10 @@ export default function BoardScreen() {
       />
 
       {items.length > 0 ? (
-        <SortControl value={sortOrder} onChange={setSortOrder} />
+        <View className="flex-row items-center justify-between gap-3 px-4 pb-2 pt-3">
+          <SortControl value={sortOrder} onChange={setSortOrder} />
+          <DensityControl value={density} onChange={setDensity} />
+        </View>
       ) : null}
 
       {items.length === 0 ? (
@@ -188,22 +197,24 @@ export default function BoardScreen() {
           onCta={() => setSheetColumn(board.columns[0] ?? null)}
         />
       ) : (
-        <DraggableBoard
-          board={board}
-          items={items}
-          workspaceContext={context}
-          locks={cardLocks}
-          onCardPress={onCardPress}
-          onAddCard={openAdd}
-          onAddColumn={() => setAddColumnOpen(true)}
-          onMoveCard={moveCard}
-          onReorderColumns={reorderColumns}
-          onDeleteColumn={(col) => {
-            setDeleteError(null);
-            setDeleteTarget(col);
-          }}
-          sortOrder={sortOrder}
-        />
+        <DensityProvider value={density}>
+          <DraggableBoard
+            board={board}
+            items={items}
+            workspaceContext={context}
+            locks={cardLocks}
+            onCardPress={onCardPress}
+            onAddCard={openAdd}
+            onAddColumn={() => setAddColumnOpen(true)}
+            onMoveCard={moveCard}
+            onReorderColumns={reorderColumns}
+            onDeleteColumn={(col) => {
+              setDeleteError(null);
+              setDeleteTarget(col);
+            }}
+            sortOrder={sortOrder}
+          />
+        </DensityProvider>
       )}
 
       <AddItemSheet
@@ -245,7 +256,7 @@ export default function BoardScreen() {
             setDeleteTarget(null);
             setDeleteError(null);
           } catch (e) {
-            setDeleteError(e instanceof ApiError ? e.message : "Couldn't delete this lane.");
+            setDeleteError(e instanceof ApiError ? e.message : "Couldn't delete this lane. Check your connection and try again.");
           }
         }}
       />
@@ -267,7 +278,7 @@ function BoardHeader({
 }) {
   return (
     <View className="flex-row items-center gap-3 border-b border-ink-border/60 px-4 pb-3 pt-1">
-      <Pressable onPress={onBack} hitSlop={8} className="h-9 w-9 items-center justify-center rounded-full bg-ink-raised">
+      <Pressable onPress={onBack} hitSlop={8} accessibilityRole="button" accessibilityLabel="Go back" className="h-9 w-9 items-center justify-center rounded-full bg-ink-raised">
         <ArrowLeftIcon size={20} color={palette.textHi} />
       </Pressable>
       <View className="flex-1">
@@ -297,7 +308,7 @@ function SortControl({
   onChange: (value: "created" | "priority" | "estimation") => void;
 }) {
   return (
-    <View className="flex-row items-center gap-2 px-4 pb-2 pt-3">
+    <View className="flex-row items-center gap-2">
       <Text className="text-meta uppercase text-text-low">Sort</Text>
       <View className="flex-row gap-1.5">
         {SORT_OPTIONS.map((o) => {
@@ -375,7 +386,7 @@ function AddItemSheet({
       });
       onCreated(item);
     } catch (e) {
-      setError(e instanceof ApiError ? e.message : "Couldn't add it.");
+      setError(e instanceof ApiError ? e.message : "Couldn't add that card. Check your connection and try again.");
     } finally {
       setBusy(false);
     }
@@ -449,7 +460,7 @@ function AddColumnSheet({
       const board = await workspaceApi.addColumn(boardId, name.trim());
       onAdded(board);
     } catch (e) {
-      setError(e instanceof ApiError ? e.message : "Couldn't add the lane.");
+      setError(e instanceof ApiError ? e.message : "Couldn't add the lane. Check your connection and try again.");
     } finally {
       setBusy(false);
     }

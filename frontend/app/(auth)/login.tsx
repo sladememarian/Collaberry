@@ -3,6 +3,7 @@ import React, { useState } from "react";
 import { KeyboardAvoidingView, Platform, ScrollView, Text, View } from "react-native";
 
 import { AppContainer } from "@/components/AppContainer";
+import { NetworkHint } from "@/components/ui/NetworkHint";
 import { BrandMark } from "@/components/icons";
 import { Button } from "@/components/ui/Button";
 import { TextField } from "@/components/ui/TextField";
@@ -53,6 +54,8 @@ export default function LoginScreen() {
               </Text>
             </View>
 
+            <NetworkHint />
+
             <View className="gap-4">
               <TextField
                 label="Email"
@@ -79,6 +82,12 @@ export default function LoginScreen() {
               <Text className="text-body text-text-low">New here?</Text>
               <Link href="/(auth)/register" className="text-body font-semibold text-brand-purple-soft">
                 Create an account
+              </Link>
+            </View>
+
+            <View className="mt-4 items-center">
+              <Link href="/settings" className="text-sub text-text-low">
+                Server settings
               </Link>
             </View>
           </View>
