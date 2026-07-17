@@ -15,6 +15,11 @@ import { workspaceApi } from "@/api/endpoints";
 import { AppContainer } from "@/components/AppContainer";
 import { ArrowLeftIcon, ChecklistIcon, DocumentIcon, KanbanIcon } from "@/components/icons";
 import { DraggableBoard } from "@/components/kanban/DraggableBoard";
+import {
+  DensityControl,
+  DensityProvider,
+  usePersistedDensity,
+} from "@/components/kanban/density";
 import type { ColumnLocks } from "@/components/kanban/KanbanColumn";
 import { AvatarStack } from "@/components/ui/Avatar";
 import { Button } from "@/components/ui/Button";
@@ -39,6 +44,7 @@ export default function BoardScreen() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [sortOrder, setSortOrder] = useState<"created" | "priority" | "estimation">("created");
+  const [density, setDensity] = usePersistedDensity();
   const [deleteTarget, setDeleteTarget] = useState<Column | null>(null);
   const [deleteError, setDeleteError] = useState<string | null>(null);
 
@@ -176,7 +182,10 @@ export default function BoardScreen() {
       />
 
       {items.length > 0 ? (
-        <SortControl value={sortOrder} onChange={setSortOrder} />
+        <View className="flex-row items-center justify-between gap-3 px-4 pb-2 pt-3">
+          <SortControl value={sortOrder} onChange={setSortOrder} />
+          <DensityControl value={density} onChange={setDensity} />
+        </View>
       ) : null}
 
       {items.length === 0 ? (
@@ -188,22 +197,24 @@ export default function BoardScreen() {
           onCta={() => setSheetColumn(board.columns[0] ?? null)}
         />
       ) : (
-        <DraggableBoard
-          board={board}
-          items={items}
-          workspaceContext={context}
-          locks={cardLocks}
-          onCardPress={onCardPress}
-          onAddCard={openAdd}
-          onAddColumn={() => setAddColumnOpen(true)}
-          onMoveCard={moveCard}
-          onReorderColumns={reorderColumns}
-          onDeleteColumn={(col) => {
-            setDeleteError(null);
-            setDeleteTarget(col);
-          }}
-          sortOrder={sortOrder}
-        />
+        <DensityProvider value={density}>
+          <DraggableBoard
+            board={board}
+            items={items}
+            workspaceContext={context}
+            locks={cardLocks}
+            onCardPress={onCardPress}
+            onAddCard={openAdd}
+            onAddColumn={() => setAddColumnOpen(true)}
+            onMoveCard={moveCard}
+            onReorderColumns={reorderColumns}
+            onDeleteColumn={(col) => {
+              setDeleteError(null);
+              setDeleteTarget(col);
+            }}
+            sortOrder={sortOrder}
+          />
+        </DensityProvider>
       )}
 
       <AddItemSheet
@@ -297,7 +308,7 @@ function SortControl({
   onChange: (value: "created" | "priority" | "estimation") => void;
 }) {
   return (
-    <View className="flex-row items-center gap-2 px-4 pb-2 pt-3">
+    <View className="flex-row items-center gap-2">
       <Text className="text-meta uppercase text-text-low">Sort</Text>
       <View className="flex-row gap-1.5">
         {SORT_OPTIONS.map((o) => {

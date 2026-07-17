@@ -14,6 +14,11 @@ import { palette } from "@/theme/tokens";
 
 import { AppContainer } from "@/components/AppContainer";
 import { DraggableBoard } from "@/components/kanban/DraggableBoard";
+import {
+  DensityControl,
+  DensityProvider,
+  usePersistedDensity,
+} from "@/components/kanban/density";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import type { Board, Column, Item } from "@/types";
 
@@ -36,6 +41,10 @@ function mockItems(columns: Column[]): Item[] {
   const items: Item[] = [];
   columns.forEach((col, ci) => {
     for (let n = 0; n < CARD_COUNTS[ci]; n++) {
+      // The very first card carries a description + assignees so the three
+      // density modes render at visibly different heights (compact hides the
+      // body, expanded adds the description preview) — see density.spec.ts.
+      const rich = ci === 0 && n === 0;
       items.push({
         id: `item-${ci}-${n}`,
         board_id: "board-lab",
@@ -44,8 +53,12 @@ function mockItems(columns: Column[]): Item[] {
         type: "card",
         title: `${col.name} task ${n + 1}`,
         order: n,
-        data: { description: "" },
-        assignees: [],
+        data: {
+          description: rich
+            ? "Wire the login form to the auth endpoint and handle the error states."
+            : "",
+        },
+        assignees: rich ? ["Amir", "Maryam"] : [],
         tags: n % 3 === 0 ? ["work"] : [],
         due_date: null,
         estimation_time: ci === 2 ? CODE_REVIEW_ESTIMATION[n] : CARD_COUNTS[ci] - n,
@@ -71,6 +84,7 @@ export default function KanbanLab() {
   }));
   const [items, setItems] = useState<Item[]>(() => mockItems(initialColumns));
   const [sortOrder, setSortOrder] = useState<"created" | "priority" | "estimation">("created");
+  const [density, setDensity] = usePersistedDensity();
   const [deleteTarget, setDeleteTarget] = useState<Column | null>(null);
 
   if (!__DEV__) {
@@ -104,52 +118,57 @@ export default function KanbanLab() {
         <Text className="text-h2 font-bold text-text-hi">Kanban Lab</Text>
         <Text className="text-meta uppercase text-text-low">dev harness · mock data</Text>
       </View>
-      <View testID="sort-control" className="flex-row items-center gap-2 px-4 py-2">
-        <Text className="text-meta uppercase text-text-low">Sort</Text>
-        <View className="flex-row gap-1.5">
-          {(["created", "priority", "estimation"] as const).map((value) => {
-            const on = value === sortOrder;
-            return (
-              <Pressable
-                key={value}
-                testID={`sort-${value}`}
-                onPress={() => setSortOrder(value)}
-                className="rounded-md border px-2.5 py-1"
-                style={{
-                  borderColor: on ? palette.purple : palette.border,
-                  backgroundColor: on ? "rgba(168,85,247,0.10)" : "transparent",
-                }}
-              >
-                <Text className="text-meta font-medium" style={{ color: on ? palette.purpleSoft : palette.textMid }}>
-                  {value}
-                </Text>
-              </Pressable>
-            );
-          })}
+      <View testID="sort-control" className="flex-row items-center justify-between gap-2 px-4 py-2">
+        <View className="flex-row items-center gap-2">
+          <Text className="text-meta uppercase text-text-low">Sort</Text>
+          <View className="flex-row gap-1.5">
+            {(["created", "priority", "estimation"] as const).map((value) => {
+              const on = value === sortOrder;
+              return (
+                <Pressable
+                  key={value}
+                  testID={`sort-${value}`}
+                  onPress={() => setSortOrder(value)}
+                  className="rounded-md border px-2.5 py-1"
+                  style={{
+                    borderColor: on ? palette.purple : palette.border,
+                    backgroundColor: on ? "rgba(168,85,247,0.10)" : "transparent",
+                  }}
+                >
+                  <Text className="text-meta font-medium" style={{ color: on ? palette.purpleSoft : palette.textMid }}>
+                    {value}
+                  </Text>
+                </Pressable>
+              );
+            })}
+          </View>
         </View>
+        <DensityControl value={density} onChange={setDensity} />
       </View>
-      <DraggableBoard
-        board={board}
-        items={items}
-        workspaceContext="work"
-        locks={{}}
-        onCardPress={() => {}}
-        onAddCard={() => {}}
-        onAddColumn={() => {
-          setBoard((prev) => {
-            const order = prev.columns.length;
-            const id = `col-new-${order}-${Date.now()}`;
-            return {
-              ...prev,
-              columns: [...prev.columns, { id, name: `Lane ${order + 1}`, order }],
-            };
-          });
-        }}
-        onMoveCard={moveCard}
-        onReorderColumns={reorderColumns}
-        onDeleteColumn={setDeleteTarget}
-        sortOrder={sortOrder}
-      />
+      <DensityProvider value={density}>
+        <DraggableBoard
+          board={board}
+          items={items}
+          workspaceContext="work"
+          locks={{}}
+          onCardPress={() => {}}
+          onAddCard={() => {}}
+          onAddColumn={() => {
+            setBoard((prev) => {
+              const order = prev.columns.length;
+              const id = `col-new-${order}-${Date.now()}`;
+              return {
+                ...prev,
+                columns: [...prev.columns, { id, name: `Lane ${order + 1}`, order }],
+              };
+            });
+          }}
+          onMoveCard={moveCard}
+          onReorderColumns={reorderColumns}
+          onDeleteColumn={setDeleteTarget}
+          sortOrder={sortOrder}
+        />
+      </DensityProvider>
 
       <ConfirmDialog
         open={deleteTarget !== null}
