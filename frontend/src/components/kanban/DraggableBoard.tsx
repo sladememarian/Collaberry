@@ -21,11 +21,18 @@ import Animated, {
   withTiming,
 } from "react-native-reanimated";
 import React, { useCallback, useMemo, useRef, useState } from "react";
-import { Pressable, ScrollView, Text, useWindowDimensions, View, type LayoutChangeEvent, type NativeSyntheticEvent, type NativeScrollEvent } from "react-native";
+import { Platform, Pressable, ScrollView, Text, useWindowDimensions, View, type LayoutChangeEvent, type NativeSyntheticEvent, type NativeScrollEvent } from "react-native";
 
 import { DotGridIcon, PlusIcon, TrashIcon } from "@/components/icons";
 import { glow, palette, type WorkspaceContext } from "@/theme/tokens";
 import type { Board, Column, Item } from "@/types";
+import {
+  ADD_LANE_GAP,
+  BOARD_PAD,
+  LANE_GUTTER,
+  computeAddLaneWidth,
+  computeLaneWidth,
+} from "@/utils/laneLayout";
 
 import type { ColumnLocks } from "./KanbanColumn";
 import { TaskCard } from "./TaskCard";
@@ -48,7 +55,7 @@ export interface DraggableBoardProps {
   sortOrder?: 'created' | 'priority' | 'estimation';
 }
 
-const GUTTER = 16;
+const GUTTER = BOARD_PAD;
 const SPRING = { damping: 18, stiffness: 220, mass: 0.7 };
 
 export function DraggableBoard({
@@ -80,19 +87,17 @@ export function DraggableBoard({
     [board.columns],
   );
 
-  // Lanes always shrink (or grow) to fit every lane on screen at once — add a
-  // 5th, 6th, etc. and each lane narrows to make room, so the board keeps
-  // filling the viewport instead of overflowing sideways. Only once lanes
-  // would get uncomfortably narrow does a floor kick in and the board starts
-  // scrolling horizontally from there.
-  const columnWidth = useMemo(() => {
-    const available = screenW - GUTTER * 2;
-    const n = Math.max(columns.length, 1);
-    const fitWidth = (available - GUTTER * (n - 1)) / n;
-    const floor = screenW >= 900 ? 260 : screenW >= 600 ? 220 : available * 0.75;
-    const cap = 420; // one or two lanes shouldn't stretch absurdly wide
-    return Math.max(Math.min(fitWidth, cap), floor);
-  }, [screenW, columns.length]);
+  // Fit-lane: on desktop every lane + the Add control share the viewport.
+  // Adding a lane narrows the others so nothing spills off-screen. Phones keep
+  // a readable card width and scroll horizontally.
+  const columnWidth = useMemo(
+    () => computeLaneWidth(screenW, columns.length),
+    [screenW, columns.length],
+  );
+  const addLaneWidth = useMemo(
+    () => computeAddLaneWidth(columnWidth, screenW),
+    [columnWidth, screenW],
+  );
 
   const byColumn = useMemo(() => {
     const map: Record<string, Item[]> = {};
@@ -190,7 +195,7 @@ export function DraggableBoard({
       onScroll={onScroll}
       scrollEventThrottle={16}
       onLayout={onBoardLayout}
-      contentContainerStyle={{ paddingHorizontal: GUTTER, paddingTop: 4 }}
+      contentContainerStyle={{ paddingHorizontal: BOARD_PAD, paddingTop: 4, paddingBottom: 8, alignItems: "stretch" }}
       className="flex-1"
     >
       {columns.map((col) => (
@@ -220,8 +225,9 @@ export function DraggableBoard({
           matches the column rhythm instead of a stray floating button. */}
       <Pressable
         onPress={onAddColumn}
-        style={{ width: Math.min(160, columnWidth * 0.7), height: laneHeight }}
-        className="mr-3.5 items-center justify-center gap-2 rounded-xl border border-dashed border-ink-hair bg-ink-base/20"
+        testID="add-lane"
+        style={{ width: addLaneWidth, height: laneHeight, marginRight: LANE_GUTTER }}
+        className="items-center justify-center gap-2 rounded-xl border border-dashed border-ink-hair bg-ink-base/20"
         accessibilityLabel="Add a lane"
       >
         <View className="h-9 w-9 items-center justify-center rounded-full bg-ink-raised">
@@ -318,17 +324,17 @@ function DraggableColumn({
     [column.id, laneX, laneLift, onLaneDragStart, onHoverColumn, onLaneDrop, laneDropTarget],
   );
 
-  const laneDragStyle = useAnimatedStyle(() => ({
-    transform: [{ translateX: laneX.value }, { scale: 1 + laneLift.value * 0.02 }],
-    zIndex: laneLift.value > 0 ? 40 : 0,
-    // Always a real boxShadow string (never undefined) — reanimated's web
-    // style updater passes this straight to a parser that only special-cases
-    // the string "none", not undefined/null, and throws otherwise. At rest
-    // (lift 0) this just fades the shadow's alpha to 0, which reads the same
-    // as no shadow.
-    boxShadow: `0px ${laneLift.value * 8}px ${laneLift.value * 24}px rgba(0,0,0,${laneLift.value * 0.4})`,
-    opacity: 1 - laneLift.value * 0.08,
-  }));
+  const laneDragStyle = useAnimatedStyle(() => {
+    const base = {
+      transform: [{ translateX: laneX.value }, { scale: 1 + laneLift.value * 0.02 }],
+      zIndex: laneLift.value > 0 ? 40 : 0,
+      opacity: 1 - laneLift.value * 0.08,
+    } as Record<string, unknown>;
+    if (Platform.OS === "web") {
+      base.boxShadow = `0px ${laneLift.value * 8}px ${laneLift.value * 24}px rgba(0,0,0,${laneLift.value * 0.4})`;
+    }
+    return base;
+  });
 
   return (
     // NOTE: NativeWind `className` is dropped on reanimated Animated.View in
@@ -336,7 +342,7 @@ function DraggableColumn({
     // style on the two Animated.Views here MUST be inline, not className, or
     // it silently no-ops (this was the real cause of the dead lane scroll).
     <Animated.View
-      style={[{ width, height, marginRight: 14 }, laneDragStyle]}
+      style={[{ width, height, marginRight: LANE_GUTTER }, laneDragStyle]}
       onLayout={(e) => {
         // Record this lane's content-space x-range (stable regardless of
         // scroll position) straight from the layout event. `resolveColumn`
@@ -535,14 +541,18 @@ function DraggableCard({
     zIndex: lifted.value > 0 ? 50 : 0,
   }));
 
-  const liftStyle = useAnimatedStyle(() => ({
-    transform: [{ scale: 1 + lifted.value * 0.04 }],
-    // Always a real string (never undefined) — reanimated's web updater feeds
-    // this to a parser that only special-cases "none" and throws on nullish.
-    // At rest (lifted 0) the alpha just fades to 0, same as no shadow.
-    boxShadow: `0px ${lifted.value * 10}px ${lifted.value * 18}px rgba(0,0,0,${lifted.value * 0.45})`,
-    opacity: 1 - lifted.value * 0.05,
-  }));
+  // Web can animate a CSS boxShadow string. Native Android crashes if Reanimated
+  // tries to parse CSS boxShadow — use scale/opacity only there.
+  const liftStyle = useAnimatedStyle(() => {
+    const base = {
+      transform: [{ scale: 1 + lifted.value * 0.04 }],
+      opacity: 1 - lifted.value * 0.05,
+    } as Record<string, unknown>;
+    if (Platform.OS === "web") {
+      base.boxShadow = `0px ${lifted.value * 10}px ${lifted.value * 18}px rgba(0,0,0,${lifted.value * 0.45})`;
+    }
+    return base;
+  });
 
   return (
     <GestureDetector gesture={pan}>

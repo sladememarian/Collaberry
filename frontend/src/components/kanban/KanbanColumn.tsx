@@ -10,6 +10,7 @@ import { Pressable, Text, View } from "react-native";
 import { PlusIcon } from "@/components/icons";
 import { palette, type WorkspaceContext } from "@/theme/tokens";
 import type { Column, Item } from "@/types";
+import { LANE_GUTTER } from "@/utils/laneLayout";
 
 import { TaskCard } from "./TaskCard";
 
@@ -49,7 +50,7 @@ function KanbanColumnBase({
   );
 
   return (
-    <View style={{ width }} className="mr-3.5">
+    <View style={{ width, marginRight: LANE_GUTTER }}>
       <View className="mb-3 flex-row items-center justify-between px-1">
         <View className="flex-row items-center gap-2">
           <Text className="text-h3 font-semibold text-text-hi">{column.name}</Text>

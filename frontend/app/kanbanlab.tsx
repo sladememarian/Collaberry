@@ -135,7 +135,16 @@ export default function KanbanLab() {
         locks={{}}
         onCardPress={() => {}}
         onAddCard={() => {}}
-        onAddColumn={() => {}}
+        onAddColumn={() => {
+          setBoard((prev) => {
+            const order = prev.columns.length;
+            const id = `col-new-${order}-${Date.now()}`;
+            return {
+              ...prev,
+              columns: [...prev.columns, { id, name: `Lane ${order + 1}`, order }],
+            };
+          });
+        }}
         onMoveCard={moveCard}
         onReorderColumns={reorderColumns}
         onDeleteColumn={setDeleteTarget}

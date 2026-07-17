@@ -3,6 +3,7 @@ import React, { useState } from "react";
 import { KeyboardAvoidingView, Platform, ScrollView, Text, View } from "react-native";
 
 import { AppContainer } from "@/components/AppContainer";
+import { NetworkHint } from "@/components/ui/NetworkHint";
 import { BrandMark } from "@/components/icons";
 import { Button } from "@/components/ui/Button";
 import { TextField } from "@/components/ui/TextField";
@@ -52,6 +53,8 @@ export default function LoginScreen() {
                 Where solo focus meets a team in sync.
               </Text>
             </View>
+
+            <NetworkHint />
 
             <View className="gap-4">
               <TextField

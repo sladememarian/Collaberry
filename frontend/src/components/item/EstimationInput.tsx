@@ -3,7 +3,7 @@
  * help icon (hover tooltip on web, tap-to-open dialog on mobile).
  */
 import React, { useState } from "react";
-import { Pressable, Text, TextInput, View } from "react-native";
+import { Platform, Pressable, Text, TextInput, View } from "react-native";
 
 import { QuestionIcon } from "@/components/icons";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
@@ -46,7 +46,17 @@ export function EstimationInput({
             <View
               testID="estimation-help-tooltip"
               className="absolute left-0 top-5 z-10 w-56 rounded-md border border-ink-border bg-ink-base p-2.5"
-              style={{ boxShadow: `0px 4px 16px rgba(0,0,0,0.4)` }}
+              style={
+                Platform.OS === "web"
+                  ? ({ boxShadow: "0px 4px 16px rgba(0,0,0,0.4)" } as object)
+                  : {
+                      shadowColor: "#000",
+                      shadowOpacity: 0.35,
+                      shadowRadius: 10,
+                      shadowOffset: { width: 0, height: 4 },
+                      elevation: 8,
+                    }
+              }
             >
               <Text className="text-meta text-text-mid">{ESTIMATION_HELP_TEXT}</Text>
             </View>

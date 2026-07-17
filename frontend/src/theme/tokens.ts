@@ -6,6 +6,8 @@
  * Theme: Deep Futuristic Cyber-Minimalism.
  */
 
+import { Platform, type ViewStyle } from "react-native";
+
 export const palette = {
   void: "#0A0A0C",
   base: "#0E0E12",
@@ -67,25 +69,41 @@ export const contextAccent: Record<
   personal: { color: "#8B8F9E", glow: "rgba(139,143,158,0.35)", label: "Personal" },
 };
 
-/** Bakes a fixed opacity into a hex color; passes rgba/rgb strings through
- *  untouched (caller already chose their own alpha for those). */
+/** Bakes a fixed opacity into a hex color; passes rgba/rgb strings through. */
 function withOpacity(color: string, opacity: number): string {
   if (color.startsWith("rgb")) return color;
   const hex = color.replace("#", "");
-  const n = parseInt(hex, 16);
+  const n = parseInt(hex.length === 3 ? hex.split("").map((c) => c + c).join("") : hex, 16);
+  if (Number.isNaN(n)) return color;
   const r = (n >> 16) & 255;
   const g = (n >> 8) & 255;
   const b = n & 255;
   return `rgba(${r}, ${g}, ${b}, ${opacity})`;
 }
 
-/** A soft neon glow for elevated / focused surfaces. Purple by default.
- *  Uses "boxShadow" (not the deprecated "shadow*" props) — supported on both
- *  react-native-web and native RN 0.76+. */
-export const glow = (color: string = palette.purple, radius = 24) => ({
-  boxShadow: `0px 0px ${radius}px ${withOpacity(color, 0.55)}`,
-  elevation: 12,
-});
+/**
+ * Soft neon glow for elevated / focused surfaces.
+ *
+ * IMPORTANT for Android stability:
+ * - Web can use CSS `boxShadow`.
+ * - Native Android/iOS get classic shadow* / elevation props.
+ * Animated CSS boxShadow strings have crashed production Android builds when
+ * fed through Reanimated, so never animate this helper on native.
+ */
+export const glow = (color: string = palette.purple, radiusPx = 24): ViewStyle => {
+  if (Platform.OS === "web") {
+    return {
+      boxShadow: `0px 0px ${radiusPx}px ${withOpacity(color, 0.55)}`,
+    } as ViewStyle;
+  }
+  return {
+    shadowColor: color,
+    shadowOpacity: 0.45,
+    shadowRadius: Math.max(6, radiusPx / 2),
+    shadowOffset: { width: 0, height: 0 },
+    elevation: Math.min(18, Math.max(6, Math.round(radiusPx / 2))),
+  };
+};
 
 /** Grouped type ramp for programmatic use (mirrors tailwind fontSize). */
 export const type = {

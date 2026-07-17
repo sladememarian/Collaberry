@@ -191,3 +191,35 @@ test("a lane can be deleted via its trash affordance and confirm dialog", async 
 
   await expect(page.getByText("Blocked", { exact: true })).toHaveCount(0);
 });
+
+test("desktop fit-lane keeps Add lane on screen as lanes grow", async ({ page }) => {
+  await openLab(page);
+
+  // Lab starts with 5 lanes. Add-lane control must be fully inside the viewport
+  // on a 1280px desktop — this is the regression the S24/desktop report hit.
+  const add = page.getByTestId("add-lane");
+  await expect(add).toBeVisible();
+
+  const box = await add.boundingBox();
+  expect(box).toBeTruthy();
+  if (!box) return;
+
+  const viewport = page.viewportSize();
+  expect(viewport).toBeTruthy();
+  if (!viewport) return;
+
+  // Fully on-screen: left edge >= 0 and right edge <= viewport width (small pad).
+  expect(box.x).toBeGreaterThanOrEqual(0);
+  expect(box.x + box.width).toBeLessThanOrEqual(viewport.width + 1);
+
+  // Click Add lane a few times (lab creates a local column) — remaining lanes
+  // must shrink so the control never slides past the right edge.
+  for (let i = 0; i < 3; i++) {
+    await add.click();
+    await page.waitForTimeout(250);
+    const next = await add.boundingBox();
+    expect(next).toBeTruthy();
+    if (!next) return;
+    expect(next.x + next.width).toBeLessThanOrEqual(viewport.width + 1);
+  }
+});
