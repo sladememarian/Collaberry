@@ -155,7 +155,7 @@ export default function BoardScreen() {
 
   if (loading) {
     return (
-      <AppContainer>
+      <AppContainer variant="plain">
         <View className="flex-1 items-center justify-center">
           <ActivityIndicator color={palette.purple} />
         </View>
@@ -165,7 +165,7 @@ export default function BoardScreen() {
 
   if (error || !board) {
     return (
-      <AppContainer>
+      <AppContainer variant="plain">
         <BoardHeader title="Board" onBack={goBack} presence={[]} connected={false} />
         <EmptyState title="Can't load this board" body={error ?? undefined} ctaLabel="Try again" onCta={load} />
       </AppContainer>
@@ -173,7 +173,7 @@ export default function BoardScreen() {
   }
 
   return (
-    <AppContainer>
+    <AppContainer variant="plain">
       <BoardHeader
         title={board.name}
         onBack={goBack}

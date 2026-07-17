@@ -56,8 +56,14 @@ interface Props {
   children: React.ReactNode;
   /** Skip the top safe-area pad when a screen renders its own header row. */
   edgeToEdge?: boolean;
-  /** "grid" (default) board backdrop; "aurora" cooler item-detail backdrop. */
-  variant?: "grid" | "aurora";
+  /**
+   * Backdrop behind the screen:
+   * - "grid" (default): drifting dot-grid + cursor glow (Home, auth).
+   * - "aurora": slow drifting gradient bands (item detail).
+   * - "plain": solid void, no ambient motion — used on the tasks/kanban board
+   *   where the lanes are the focus and the ambient reads as noise behind them.
+   */
+  variant?: "grid" | "aurora" | "plain";
 }
 
 const GRID_SPACING = 34;
@@ -70,17 +76,20 @@ export function AppContainer({ children, edgeToEdge = false, variant = "grid" }:
   return (
     <View className="flex-1 bg-ink-void" style={styles.root}>
       {/* Ambient backdrop — decorative, pointerEvents off so it never intercepts
-          touch/scroll/drag, and clipped so it can't affect page layout. */}
-      <View pointerEvents="none" style={styles.backdrop} testID={`app-backdrop-${variant}`}>
-        {variant === "aurora" ? (
-          <AuroraWaves reduceMotion={reduceMotion} />
-        ) : (
-          <>
-            <DotGrid reduceMotion={reduceMotion} />
-            <CursorGlow reduceMotion={reduceMotion} />
-          </>
-        )}
-      </View>
+          touch/scroll/drag, and clipped so it can't affect page layout. The
+          "plain" variant renders nothing (solid void from styles.root). */}
+      {variant !== "plain" ? (
+        <View pointerEvents="none" style={styles.backdrop} testID={`app-backdrop-${variant}`}>
+          {variant === "aurora" ? (
+            <AuroraWaves reduceMotion={reduceMotion} />
+          ) : (
+            <>
+              <DotGrid reduceMotion={reduceMotion} />
+              <CursorGlow reduceMotion={reduceMotion} />
+            </>
+          )}
+        </View>
+      ) : null}
 
       <View
         className="flex-1"

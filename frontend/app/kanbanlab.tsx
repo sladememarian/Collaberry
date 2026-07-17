@@ -112,7 +112,7 @@ export default function KanbanLab() {
   };
 
   return (
-    <AppContainer>
+    <AppContainer variant="plain">
       {/* testID → data-testid on web (RNW), so Playwright can anchor here. */}
       <View testID="kanbanlab" className="border-b border-ink-border/60 px-4 py-3">
         <Text className="text-h2 font-bold text-text-hi">Kanban Lab</Text>
