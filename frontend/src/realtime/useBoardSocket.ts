@@ -7,7 +7,7 @@
  */
 import { useCallback, useEffect, useRef, useState } from "react";
 
-import { WS_BASE } from "@/api/client";
+import { getWsBase } from "@/api/client";
 import type { BoardChange, ClientFrame, PresenceUser, ServerFrame } from "@/types";
 
 const HEARTBEAT_MS = 15_000;
@@ -64,7 +64,7 @@ export function useBoardSocket({ boardId, token, onEvent }: Options): BoardSocke
     if (!boardId || !token) return;
     closedByUs.current = false;
 
-    const url = `${WS_BASE}/ws/boards/${boardId}?token=${encodeURIComponent(token)}`;
+    const url = `${getWsBase()}/ws/boards/${boardId}?token=${encodeURIComponent(token)}`;
     const ws = new WebSocket(url);
     wsRef.current = ws;
 

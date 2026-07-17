@@ -84,6 +84,12 @@ export default function LoginScreen() {
                 Create an account
               </Link>
             </View>
+
+            <View className="mt-4 items-center">
+              <Link href="/settings" className="text-sub text-text-low">
+                Server settings
+              </Link>
+            </View>
           </View>
         </ScrollView>
       </KeyboardAvoidingView>

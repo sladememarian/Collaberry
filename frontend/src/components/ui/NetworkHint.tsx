@@ -6,14 +6,14 @@
 import React from "react";
 import { Platform, Text, View } from "react-native";
 
-import { API_BASE, API_USES_LOOPBACK } from "@/api/client";
+import { apiUsesLoopback, getApiBase } from "@/api/client";
 import { palette } from "@/theme/tokens";
 
 export function NetworkHint() {
   // Web + iOS simulator are fine with localhost. Emulator gets rewritten to
   // 10.0.2.2 automatically. Only a physical Android device still on loopback
   // needs a loud warning.
-  if (Platform.OS !== "android" || !API_USES_LOOPBACK) return null;
+  if (Platform.OS !== "android" || !apiUsesLoopback()) return null;
 
   return (
     <View
@@ -31,9 +31,9 @@ export function NetworkHint() {
         Phone can't reach this backend host
       </Text>
       <Text style={{ color: palette.textMid, fontSize: 12, lineHeight: 17 }}>
-        This build is pointed at {API_BASE}. On a real phone that means "the
-        phone itself", not your laptop. Rebuild with your PC's LAN IP, e.g.{"\n"}
-        EXPO_PUBLIC_API_URL=http://192.168.x.x:8088
+        This app is pointed at {getApiBase()} — on a real phone that means "the
+        phone itself", not your server. Use "Server settings" below to point it
+        at the right address.
       </Text>
     </View>
   );

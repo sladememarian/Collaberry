@@ -13,7 +13,7 @@ import React, {
 } from "react";
 
 import { authApi } from "@/api/endpoints";
-import { setAuthToken } from "@/api/client";
+import { loadServerOverride, setAuthToken } from "@/api/client";
 import type { UserPublic } from "@/types";
 
 const TOKEN_KEY = "collaberry.token";
@@ -51,6 +51,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     (async () => {
       try {
+        // Apply any saved on-device server override before the first request —
+        // the /me revalidation below must hit the right backend.
+        await loadServerOverride();
         const t = await AsyncStorage.getItem(TOKEN_KEY);
         const u = await AsyncStorage.getItem(USER_KEY);
         if (t && u) {

@@ -13,6 +13,7 @@ import { AppContainer } from "@/components/AppContainer";
 import {
   BrandMark,
   ChevronRightIcon,
+  GearIcon,
   KanbanIcon,
   LogoutIcon,
   PlusIcon,
@@ -112,7 +113,22 @@ export default function HomeScreen() {
           </View>
         </View>
         <View className="flex-row items-center gap-3">
-          <Pressable onPress={signOut} hitSlop={8} className="h-9 w-9 items-center justify-center rounded-full bg-ink-raised">
+          <Pressable
+            onPress={() => router.push("/settings")}
+            hitSlop={8}
+            accessibilityRole="button"
+            accessibilityLabel="Server settings"
+            className="h-11 w-11 items-center justify-center rounded-full bg-ink-raised"
+          >
+            <GearIcon size={18} color={palette.textMid} />
+          </Pressable>
+          <Pressable
+            onPress={signOut}
+            hitSlop={8}
+            accessibilityRole="button"
+            accessibilityLabel="Sign out"
+            className="h-11 w-11 items-center justify-center rounded-full bg-ink-raised"
+          >
             <LogoutIcon size={18} color={palette.textMid} />
           </Pressable>
           {user ? <Avatar name={user.display_name} id={user.id} size={36} /> : null}
