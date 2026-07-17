@@ -72,7 +72,7 @@ test("every lane renders a visible enclosed track, including empty ones", async 
   // (non-transparent) background so it reads as a drop-zone.
   const blockedHeader = page.getByText("Blocked", { exact: true }).first();
   await expect(blockedHeader).toBeVisible();
-  await expect(page.getByText("Drop a card here").first()).toBeVisible();
+  await expect(page.getByLabel("Add the first card to Blocked")).toBeVisible();
 
   // The empty lane's track should have a non-transparent background surface.
   const trackBg = await blockedHeader.evaluate((el: HTMLElement) => {

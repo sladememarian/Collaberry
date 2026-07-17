@@ -105,7 +105,7 @@ export default function BoardScreen() {
       const ws = wss.find((w) => w.id === b.workspace_id);
       if (ws) setContext(ws.context);
     } catch (e) {
-      setError(e instanceof ApiError ? e.message : "Couldn't open this board.");
+      setError(e instanceof ApiError ? e.message : "Couldn't open this board. Check your connection and try again.");
     } finally {
       setLoading(false);
     }
@@ -256,7 +256,7 @@ export default function BoardScreen() {
             setDeleteTarget(null);
             setDeleteError(null);
           } catch (e) {
-            setDeleteError(e instanceof ApiError ? e.message : "Couldn't delete this lane.");
+            setDeleteError(e instanceof ApiError ? e.message : "Couldn't delete this lane. Check your connection and try again.");
           }
         }}
       />
@@ -386,7 +386,7 @@ function AddItemSheet({
       });
       onCreated(item);
     } catch (e) {
-      setError(e instanceof ApiError ? e.message : "Couldn't add it.");
+      setError(e instanceof ApiError ? e.message : "Couldn't add that card. Check your connection and try again.");
     } finally {
       setBusy(false);
     }
@@ -460,7 +460,7 @@ function AddColumnSheet({
       const board = await workspaceApi.addColumn(boardId, name.trim());
       onAdded(board);
     } catch (e) {
-      setError(e instanceof ApiError ? e.message : "Couldn't add the lane.");
+      setError(e instanceof ApiError ? e.message : "Couldn't add the lane. Check your connection and try again.");
     } finally {
       setBusy(false);
     }

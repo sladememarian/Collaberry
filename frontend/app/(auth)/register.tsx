@@ -28,7 +28,7 @@ export default function RegisterScreen() {
       await signUp(email, password, name);
       router.replace("/(app)");
     } catch (e) {
-      setError(e instanceof ApiError ? e.message : "Couldn't create your account.");
+      setError(e instanceof ApiError ? e.message : "Couldn't create your account. Check your connection and try again.");
     } finally {
       setBusy(false);
     }

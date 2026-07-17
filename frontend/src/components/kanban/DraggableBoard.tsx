@@ -425,10 +425,15 @@ function DraggableColumn({
           ) : items.length === 0 ? (
             <Pressable
               onPress={() => onAddCard(column)}
-              className="flex-1 items-center justify-center rounded-md border border-dashed border-ink-hair"
+              accessibilityRole="button"
+              accessibilityLabel={`Add the first card to ${column.name}`}
+              className="flex-1 items-center justify-center gap-2 rounded-md border border-dashed border-ink-hair"
             >
+              <View className="h-8 w-8 items-center justify-center rounded-full bg-ink-raised">
+                <PlusIcon size={16} color={palette.textMid} />
+              </View>
               <Text className="text-sub text-text-faint">
-                {isDropTarget ? "Release to drop here" : "Drop a card here"}
+                {isDropTarget ? "Release to drop here" : "Add a card"}
               </Text>
             </Pressable>
           ) : (

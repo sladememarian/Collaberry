@@ -34,6 +34,17 @@ import type { Board, Workspace } from "@/types";
 
 const CONTEXTS: WorkspaceContext[] = ["personal", "university", "work"];
 
+const DEFAULT_LANES = ["To do", "In progress", "Done"];
+
+/** Starter board shapes offered on first board creation. `columns: null` keeps
+ *  the backend default (To do · In progress · Done). */
+const BOARD_TEMPLATES: { id: string; label: string; columns: string[] | null }[] = [
+  { id: "basic", label: "Basic board", columns: null },
+  { id: "personal-weekly", label: "Personal weekly", columns: ["This week", "Doing", "Done", "Someday"] },
+  { id: "university-term", label: "University term", columns: ["To read", "Assignments", "In progress", "Submitted"] },
+  { id: "work-sprint", label: "Work sprint", columns: ["Backlog", "In progress", "Code review", "Blocked", "Done"] },
+];
+
 export default function HomeScreen() {
   const { user, signOut } = useAuth();
   const router = useRouter();
@@ -58,7 +69,7 @@ export default function HomeScreen() {
       setWorkspaces(rows);
       setActiveId((cur) => cur ?? rows[0]?.id ?? null);
     } catch (e) {
-      setError(e instanceof ApiError ? e.message : "Couldn't load your workspaces.");
+      setError(e instanceof ApiError ? e.message : "Couldn't load your workspaces. Check your connection and pull to refresh.");
     } finally {
       setLoadingWs(false);
     }
@@ -342,7 +353,7 @@ function CreateWorkspaceSheet({
       setName("");
       onCreated(ws);
     } catch (e) {
-      setError(e instanceof ApiError ? e.message : "Couldn't create it.");
+      setError(e instanceof ApiError ? e.message : "Couldn't create that workspace. Check your connection and try again.");
     } finally {
       setBusy(false);
     }
@@ -394,8 +405,11 @@ function CreateBoardSheet({
   onCreated: (b: Board) => void;
 }) {
   const [name, setName] = useState("");
+  const [templateId, setTemplateId] = useState<string>(BOARD_TEMPLATES[0].id);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const template = BOARD_TEMPLATES.find((t) => t.id === templateId) ?? BOARD_TEMPLATES[0];
 
   const submit = async () => {
     if (!workspaceId) return;
@@ -403,11 +417,16 @@ function CreateBoardSheet({
     setBusy(true);
     setError(null);
     try {
-      const b = await workspaceApi.createBoard(workspaceId, name.trim());
+      const b = await workspaceApi.createBoard(
+        workspaceId,
+        name.trim(),
+        template.columns ?? undefined,
+      );
       setName("");
+      setTemplateId(BOARD_TEMPLATES[0].id);
       onCreated(b);
     } catch (e) {
-      setError(e instanceof ApiError ? e.message : "Couldn't create it.");
+      setError(e instanceof ApiError ? e.message : "Couldn't create this board. Check your connection and try again.");
     } finally {
       setBusy(false);
     }
@@ -423,9 +442,34 @@ function CreateBoardSheet({
           placeholder="e.g. Sprint 4, Reading list"
           error={error}
         />
-        <Text className="text-sub text-text-low">
-          Starts with To do · In progress · Done. You can rename lanes later.
-        </Text>
+
+        <View>
+          <Text className="mb-2 text-sub font-medium text-text-mid">Start from a template</Text>
+          <View className="gap-2">
+            {BOARD_TEMPLATES.map((t) => {
+              const on = t.id === templateId;
+              return (
+                <Pressable
+                  key={t.id}
+                  onPress={() => setTemplateId(t.id)}
+                  accessibilityRole="button"
+                  accessibilityState={{ selected: on }}
+                  className="rounded-lg border p-3"
+                  style={{
+                    borderColor: on ? palette.purple : palette.border,
+                    backgroundColor: on ? "rgba(168,85,247,0.08)" : "transparent",
+                  }}
+                >
+                  <Text className="text-body font-medium text-text-hi">{t.label}</Text>
+                  <Text className="mt-0.5 text-sub text-text-low">
+                    {(t.columns ?? DEFAULT_LANES).join(" · ")}
+                  </Text>
+                </Pressable>
+              );
+            })}
+          </View>
+        </View>
+
         <Button label="Create board" onPress={submit} loading={busy} full />
       </View>
     </Sheet>

@@ -52,6 +52,13 @@ test("a new user can register, land on Home, and see their workspace list load w
   await expect(page.getByText("Workspaces").first()).toBeVisible();
   await page.waitForTimeout(2000); // let the loadWorkspaces() request settle
 
+  // Guided first-run: the New board sheet offers starter templates so a new
+  // user isn't staring at a blank name field with no direction.
+  await page.getByText("New board").first().click();
+  await expect(page.getByText("Start from a template")).toBeVisible();
+  await expect(page.getByText("Personal weekly")).toBeVisible();
+  await expect(page.getByText("University term")).toBeVisible();
+
   const fatalErrors = consoleErrors.filter(
     (e) => !e.includes("pointerEvents") && !e.includes("DevTools"),
   );

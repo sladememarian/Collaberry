@@ -132,7 +132,7 @@ export default function ItemScreen() {
           }
         }
       } catch (e) {
-        setError(e instanceof ApiError ? e.message : "Couldn't open this item.");
+        setError(e instanceof ApiError ? e.message : "Couldn't open this item. Check your connection and try again.");
       } finally {
         setLoading(false);
       }
