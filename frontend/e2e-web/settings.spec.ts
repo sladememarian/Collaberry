@@ -23,13 +23,13 @@ test("editing the API address auto-fills the realtime (ws) address", async ({ pa
   const api = page.getByTestId("settings-api-input");
   const ws = page.getByTestId("settings-ws-input");
 
-  await api.fill("https://my-backend.example:8088");
+  await api.fill("https://my-backend.example:8080");
   // The ws field follows the api field until the user edits it by hand:
   // http(s) -> ws(s), same host/port.
-  await expect(ws).toHaveValue("wss://my-backend.example:8088");
+  await expect(ws).toHaveValue("wss://my-backend.example:8080");
 
-  await api.fill("http://192.168.1.50:8088");
-  await expect(ws).toHaveValue("ws://192.168.1.50:8088");
+  await api.fill("http://192.168.1.50:8080");
+  await expect(ws).toHaveValue("ws://192.168.1.50:8080");
 });
 
 test("a bare host is normalized to https on save and becomes the active server", async ({ page }) => {
@@ -47,13 +47,12 @@ test("reset returns the app to its build default", async ({ page }) => {
   await page.goto("/settings");
 
   // Point somewhere custom, save, then reset.
-  await page.getByTestId("settings-api-input").fill("http://10.0.0.9:8088");
+  await page.getByTestId("settings-api-input").fill("http://10.0.0.9:8080");
   await page.getByRole("button", { name: "Save & use" }).click();
-  await expect(page.getByTestId("settings-active-url")).toHaveText("http://10.0.0.9:8088");
+  await expect(page.getByTestId("settings-active-url")).toHaveText("http://10.0.0.9:8080");
 
   await page.getByRole("button", { name: "Reset to build default" }).click();
-  // The build default is whatever the web build resolved (localhost:8088 or the
-  // baked Daytona URL) — the point is that it is NOT the custom host anymore.
-  await expect(page.getByTestId("settings-active-url")).not.toHaveText("http://10.0.0.9:8088");
+  // The build default is whatever the web build resolved — the point is that it's NOT the custom host anymore.
+  await expect(page.getByTestId("settings-active-url")).not.toHaveText("http://10.0.0.9:8080");
   await expect(page.getByTestId("settings-status")).toContainText("build default");
 });

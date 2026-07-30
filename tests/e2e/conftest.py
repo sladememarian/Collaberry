@@ -13,7 +13,7 @@ import uuid
 import httpx
 import pytest
 
-GATEWAY_URL = os.environ.get("GATEWAY_URL", "http://localhost:8088")
+GATEWAY_URL = os.environ.get("GATEWAY_URL", "http://localhost:8080")
 # Envoy speaks http; the socket rides the same host on the ws:// scheme.
 WS_URL = GATEWAY_URL.replace("http://", "ws://").replace("https://", "wss://")
 

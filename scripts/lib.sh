@@ -4,7 +4,7 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 COMPOSE="docker compose"
-GATEWAY_URL="${GATEWAY_URL:-http://localhost:8088}"
+GATEWAY_URL="${GATEWAY_URL:-http://localhost:8080}"
 
 # Bypass any machine-level HTTP proxy for localhost so curl/httpx reach Envoy
 # directly rather than a system proxy agent that squats on localhost ports.

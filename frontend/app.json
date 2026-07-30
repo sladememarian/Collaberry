@@ -60,8 +60,8 @@
       "typedRoutes": true
     },
     "extra": {
-      "apiBaseUrl": "https://8088-26f0e993-32b4-45f2-af64-a392bee6cc43.daytonaproxy01.eu",
-      "wsBaseUrl": "wss://8088-26f0e993-32b4-45f2-af64-a392bee6cc43.daytonaproxy01.eu",
+      "apiBaseUrl": "https://envoy.collaberry.boxd.sh",
+      "wsBaseUrl": "wss://envoy.collaberry.boxd.sh",
       "router": {},
       "eas": {
         "projectId": "441cf83e-e43e-41f2-b4e1-863c33ff121c"

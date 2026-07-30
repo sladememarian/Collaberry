@@ -7,8 +7,8 @@
  *   1. EXPO_PUBLIC_API_URL / EXPO_PUBLIC_WS_URL
  *   2. app.json → expo.extra.apiBaseUrl / wsBaseUrl
  *   3. Platform-aware localhost fallback
- *        · web / iOS simulator → http://localhost:8088
- *        · Android emulator    → http://10.0.2.2:8088  (maps to host loopback)
+ *        · web / iOS simulator → http://localhost:8080
+ *        · Android emulator    → http://10.0.2.2:8080  (maps to host loopback)
  *        · physical Android    → still needs a LAN IP via env (we surface that)
  *
  * The resolved default can additionally be overridden at runtime from the
@@ -21,7 +21,7 @@ import { Platform } from "react-native";
 type Extra = { apiBaseUrl?: string; wsBaseUrl?: string };
 const extra = (Constants.expoConfig?.extra ?? Constants.manifest2?.extra?.expoClient?.extra ?? {}) as Extra;
 
-const DEFAULT_PORT = "8088";
+const DEFAULT_PORT = "8080";
 
 function isLoopback(url: string | undefined | null): boolean {
   if (!url) return true;
@@ -141,8 +141,6 @@ export async function probeServer(
       method: "GET",
       headers: {
         Accept: "application/json",
-        [DAYTONA_SKIP_WARNING_HEADER]: "true",
-        [DAYTONA_DISABLE_CORS_HEADER]: "true",
       },
       signal: controller.signal,
     });
@@ -156,18 +154,6 @@ export async function probeServer(
     clearTimeout(timer);
   }
 }
-
-// Daytona sandbox preview URLs show an HTML "preview warning" interstitial to
-// browser-like traffic on the first request (even though it's a 200), which
-// silently corrupts every API response. This header opts out of it. It's a
-// no-op against any non-Daytona host, so it's safe to always send.
-const DAYTONA_SKIP_WARNING_HEADER = "X-Daytona-Skip-Preview-Warning";
-// Daytona's proxy also reflects its own permissive Access-Control-Allow-Origin
-// on every response by default, stacking a second, identical ACAO header on
-// top of the one Envoy already sets correctly — browsers reject a response
-// with more than one ACAO value. This opts out of Daytona's own CORS layer so
-// only Envoy's header survives. Also a no-op against non-Daytona hosts.
-const DAYTONA_DISABLE_CORS_HEADER = "X-Daytona-Disable-CORS";
 
 let authToken: string | null = null;
 
@@ -201,8 +187,6 @@ export async function request<T>(path: string, opts: RequestOptions = {}): Promi
 
   const headers: Record<string, string> = {
     Accept: "application/json",
-    [DAYTONA_SKIP_WARNING_HEADER]: "true",
-    [DAYTONA_DISABLE_CORS_HEADER]: "true",
   };
   if (body !== undefined) headers["Content-Type"] = "application/json";
   if (auth && authToken) headers["Authorization"] = `Bearer ${authToken}`;

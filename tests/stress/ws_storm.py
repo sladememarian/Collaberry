@@ -19,7 +19,7 @@ import uuid
 import httpx
 import websockets
 
-GATEWAY_URL = os.environ.get("GATEWAY_URL", "http://localhost:8088")
+GATEWAY_URL = os.environ.get("GATEWAY_URL", "http://localhost:8080")
 WS_URL = GATEWAY_URL.replace("http://", "ws://").replace("https://", "wss://")
 WS_CLIENTS = int(os.environ.get("WS_CLIENTS", "40"))
 CARDS = int(os.environ.get("WS_CARDS", "25"))
