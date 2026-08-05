@@ -45,5 +45,11 @@
     "babel-preset-expo": "~57.0.1",
     "tailwindcss": "^3.4.17",
     "typescript": "~5.8.3"
+  },
+  "//overrides": "Patched transitive advisories that have no direct dependency to bump: postcss path traversal (GHSA sourceMappingURL .map disclosure), fast-uri host confusion via backslash authority, brace-expansion exponential expansion DoS. All three arrive through build tooling. Pinned as overrides rather than `npm audit fix --force`, which would move Expo's pinned majors. Revisit when the upstream packages widen their own ranges.",
+  "overrides": {
+    "postcss": "^8.5.23",
+    "fast-uri": "^3.1.5",
+    "brace-expansion": "^2.1.4"
   }
 }
