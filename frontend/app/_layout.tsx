@@ -9,24 +9,27 @@ import { SafeAreaProvider } from "react-native-safe-area-context";
 
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { AuthProvider } from "@/context/AuthContext";
+import { ThemeProvider } from "@/theme/ThemeContext";
 import { palette } from "@/theme/tokens";
 
 export default function RootLayout() {
   return (
     <GestureHandlerRootView style={{ flex: 1, backgroundColor: palette.void }}>
       <SafeAreaProvider>
-        <ErrorBoundary>
-          <AuthProvider>
-            <StatusBar style="light" />
-            <Stack
-              screenOptions={{
-                headerShown: false,
-                contentStyle: { backgroundColor: palette.void },
-                animation: "fade",
-              }}
-            />
-          </AuthProvider>
-        </ErrorBoundary>
+        <ThemeProvider>
+          <ErrorBoundary>
+            <AuthProvider>
+              <StatusBar style="light" />
+              <Stack
+                screenOptions={{
+                  headerShown: false,
+                  contentStyle: { backgroundColor: palette.void },
+                  animation: "fade",
+                }}
+              />
+            </AuthProvider>
+          </ErrorBoundary>
+        </ThemeProvider>
       </SafeAreaProvider>
     </GestureHandlerRootView>
   );

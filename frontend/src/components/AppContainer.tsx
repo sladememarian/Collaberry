@@ -73,11 +73,17 @@ export function AppContainer({ children, edgeToEdge = false, variant = "grid" }:
   const insets = useSafeAreaInsets();
   const reduceMotion = useReducedMotion();
 
+  // The board wants a true black behind its lanes; every other screen sits on
+  // the void. Resolved per-render (not in StyleSheet.create) so a theme switch
+  // repaints it on native, where there are no CSS vars to fall back on.
+  const canvas = variant === "plain" ? "bg-board-canvas" : "bg-ink-void";
+  const canvasColor = variant === "plain" ? palette.boardCanvas : palette.void;
+
   return (
-    <View className="flex-1 bg-ink-void" style={styles.root}>
+    <View className={`flex-1 ${canvas}`} style={{ backgroundColor: canvasColor, flex: 1 }}>
       {/* Ambient backdrop — decorative, pointerEvents off so it never intercepts
           touch/scroll/drag, and clipped so it can't affect page layout. The
-          "plain" variant renders nothing (solid void from styles.root). */}
+          "plain" variant renders nothing (solid canvas from the style above). */}
       {variant !== "plain" ? (
         <View pointerEvents="none" style={styles.backdrop} testID={`app-backdrop-${variant}`}>
           {variant === "aurora" ? (
@@ -307,7 +313,6 @@ function AuroraBand({
 }
 
 const styles = StyleSheet.create({
-  root: { backgroundColor: palette.void, flex: 1 },
   // The clip that makes all the animated overscan layout-safe. Load-bearing.
   backdrop: {
     position: "absolute",

@@ -1,3 +1,63 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+/*
+ * Theme variables.
+ *
+ * These are the DARK values — the app default — inlined here so the very first
+ * paint is correct before any JS runs. ThemeContext overwrites them on :root
+ * when the user picks light. Keep in sync with src/theme/themes.ts (DARK), which
+ * is the source of truth for both platforms.
+ *
+ * Values are bare "R G B" channels, not colors: tailwind.config.js wraps them as
+ * rgb(var(--x) / <alpha-value>) so opacity modifiers keep working.
+ */
+:root {
+  --ink-void: 10 10 12;
+  --ink-base: 14 14 18;
+  --ink-surface: 18 18 22;
+  --ink-raised: 23 23 30;
+  --ink-border: 35 35 45;
+  --ink-hair: 44 44 56;
+
+  --text-hi: 243 244 246;
+  --text-mid: 180 183 194;
+  --text-low: 122 126 140;
+  --text-faint: 76 79 92;
+
+  --brand-purple: 168 85 247;
+  --brand-purple-soft: 192 132 252;
+  --brand-purple-deep: 124 58 237;
+  --brand-blue: 59 130 246;
+  --brand-blue-soft: 96 165 250;
+  --brand-cyan: 34 211 238;
+
+  --ctx-work: 168 85 247;
+  --ctx-university: 59 130 246;
+  --ctx-personal: 139 143 158;
+
+  --state-success: 52 211 153;
+  --state-warn: 251 191 36;
+  --state-danger: 248 113 113;
+
+  --berry-raspberry: 232 92 154;
+  --berry-blueberry: 91 123 245;
+  --berry-blackberry: 75 46 107;
+
+  --board-canvas: 0 0 0;
+}
+
+/*
+ * Theme transition. Only background/border/text colors animate — animating
+ * `all` would drag transforms and opacity into it and fight Reanimated's
+ * board-drag animations. Suppressed entirely under reduce-motion.
+ */
+@media (prefers-reduced-motion: no-preference) {
+  body * {
+    transition:
+      background-color 220ms ease,
+      border-color 220ms ease,
+      color 220ms ease;
+  }
+}
