@@ -55,7 +55,7 @@ class UserRepository:
     async def create(self, *, email: str, password: str, display_name: str) -> dict:
         doc = {
             "email": email.lower(),
-            "password_hash": hash_password(password),
+            "password_hash": await hash_password(password),
             "display_name": display_name,
             "created_at": utcnow(),
         }

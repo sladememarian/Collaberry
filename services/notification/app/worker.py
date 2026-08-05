@@ -17,7 +17,7 @@ import asyncio
 import contextlib
 from datetime import timedelta
 
-from collaberry_common.events import BoardEvent, EventType, NOTIFY_CHANNEL, parse_event
+from collaberry_common.events import BoardEvent
 from collaberry_common.models import utcnow
 
 from .repository import NotificationRepository
@@ -67,28 +67,23 @@ async def sweep_deadlines(repo: NotificationRepository, warning_hours: int) -> i
 
 
 async def run_worker(app) -> None:
-    """Long-running loop: drain the notify channel and sweep deadlines on a timer."""
+    """Long-running loop: sweep deadlines on a timer.
+
+    Mentions used to be consumed here off Redis pub/sub. They now arrive as
+    durable RabbitMQ jobs (see ``JobConsumer`` in notification/app/main.py),
+    which is what makes them survive this service being down. Do not re-add a
+    subscription to the notify channel here as a "safety net": workspace-service
+    publishes each mention to exactly one transport, and a second consumer would
+    write two inbox rows for one mention.
+
+    The deadline sweep stays here because it's a timer, not a message — there is
+    nothing to queue, and a missed tick is corrected by the next one a minute
+    later.
+    """
     repo: NotificationRepository = app.state.repo
-    redis = app.state.redis
     warning_hours = app.state.settings.deadline_warning_hours
 
-    pubsub = redis.pubsub()
-    await pubsub.subscribe(NOTIFY_CHANNEL)
-    app.state._pubsub = pubsub
-
-    async def consume_events() -> None:
-        async for message in pubsub.listen():
-            if message.get("type") != "message":
-                continue
-            with contextlib.suppress(Exception):
-                event = parse_event(message["data"])
-                if event.type is EventType.MENTION:
-                    await process_mention(repo, event)
-
-    async def sweep_loop() -> None:
-        while True:
-            with contextlib.suppress(Exception):
-                await sweep_deadlines(repo, warning_hours)
-            await asyncio.sleep(60)  # a minute between sweeps is plenty
-
-    await asyncio.gather(consume_events(), sweep_loop())
+    while True:
+        with contextlib.suppress(Exception):
+            await sweep_deadlines(repo, warning_hours)
+        await asyncio.sleep(60)  # a minute between sweeps is plenty

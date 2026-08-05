@@ -33,6 +33,24 @@ class _FakeMongo:
         pass
 
 
+class _FakeQueue:
+    """Stand-in for JobPublisher that records what was enqueued.
+
+    Without this the routes hit ``app.state.queue`` on an app whose lifespan
+    never ran, raising AttributeError inside the emit path's exception guard —
+    the tests would pass while the mention job silently never published.
+    """
+
+    def __init__(self) -> None:
+        self.published: list[tuple[str, dict]] = []
+
+    async def publish(self, routing_key: str, payload: dict, *, attempts: int = 0) -> None:
+        self.published.append((routing_key, payload))
+
+    async def close(self) -> None:  # pragma: no cover
+        pass
+
+
 def _claims_for(user_id: str) -> TokenClaims:
     return TokenClaims(user_id=user_id, email=f"{user_id}@t.dev", display_name=user_id)
 
@@ -53,6 +71,7 @@ async def ctx():
     app.state.repo = WorkspaceRepository(mongo)  # type: ignore[arg-type]
     await app.state.repo.ensure_indexes()
     app.state.redis = fake_aioredis.FakeRedis(decode_responses=True)
+    app.state.queue = _FakeQueue()
 
     # Identity comes from a test header so several clients (different users) can
     # hit the same app concurrently without stepping on a shared override.
@@ -77,6 +96,7 @@ async def ctx():
         def __init__(self):
             self.app = app
             self.redis = app.state.redis
+            self.queue = app.state.queue
 
         def user(self, user_id: str) -> AsyncClient:
             return as_user(user_id)

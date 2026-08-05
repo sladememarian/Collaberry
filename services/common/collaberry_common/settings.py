@@ -24,6 +24,19 @@ class Settings(BaseSettings):
     mongo_db: str = "collaberry"
     redis_url: str = "redis://redis:6379/0"
 
+    # --- message queue ----------------------------------------------------
+    # RabbitMQ carries work that must not be lost if a consumer is down when it
+    # is produced. Redis pub/sub stays for live fan-out (presence, board events)
+    # where a missed message is fine because the client refetches; the queue is
+    # for durable jobs — notifications, mention processing, deadline reminders.
+    amqp_url: str = "amqp://collaberry:collaberry-dev@rabbitmq:5672/"
+    # Prefetch caps how many unacked messages one consumer holds. Low enough
+    # that a slow worker doesn't hoard the queue, high enough to keep pipelining.
+    amqp_prefetch: int = 16
+    # Failed jobs are retried this many times (with backoff) before being
+    # parked on the dead-letter queue for inspection.
+    amqp_max_retries: int = 3
+
     # --- auth / jwt -------------------------------------------------------
     # Tokens are RS256. The auth-service owns the private key; everyone else
     # validates against the published JWKS (or the mounted public key).

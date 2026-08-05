@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import contextlib
 import time
 
 import jwt
@@ -29,16 +30,43 @@ def keys(tmp_path):
     return load_private_key(str(priv)), load_public_key(str(pub))
 
 
-def test_password_round_trip():
-    hashed = hash_password("hunter2-correct-horse")
+async def test_password_round_trip():
+    hashed = await hash_password("hunter2-correct-horse")
     assert hashed != "hunter2-correct-horse"
-    assert verify_password("hunter2-correct-horse", hashed)
-    assert not verify_password("wrong", hashed)
+    assert await verify_password("hunter2-correct-horse", hashed)
+    assert not await verify_password("wrong", hashed)
 
 
-def test_verify_password_is_defensive():
+async def test_verify_password_is_defensive():
     # Garbage hash must not raise, just fail closed.
-    assert verify_password("x", "not-a-real-bcrypt-hash") is False
+    assert await verify_password("x", "not-a-real-bcrypt-hash") is False
+
+
+async def test_password_hashing_does_not_block_the_loop():
+    """Regression: bcrypt at rounds=12 costs ~100-200ms of pure CPU. Running it
+    inline on the event loop stalls every concurrent request for that long, so
+    a burst of logins serialises. Offloaded to the thread pool, N hashes run
+    concurrently and the loop stays responsive throughout."""
+    import asyncio
+
+    ticks = 0
+
+    async def heartbeat() -> None:
+        nonlocal ticks
+        while True:
+            await asyncio.sleep(0.005)
+            ticks += 1
+
+    beat = asyncio.create_task(heartbeat())
+    try:
+        await asyncio.gather(*(hash_password(f"pw-{i}") for i in range(4)))
+    finally:
+        beat.cancel()
+        with contextlib.suppress(asyncio.CancelledError):
+            await beat
+
+    # A blocked loop can't service the sleep, so it would tick ~0 times.
+    assert ticks > 3, f"Event loop only ticked {ticks} times — bcrypt blocked it"
 
 
 def test_ensure_keypair_is_idempotent(tmp_path):

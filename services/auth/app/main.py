@@ -116,7 +116,7 @@ async def register(body: RegisterRequest, request: Request) -> TokenResponse:
 async def login(body: LoginRequest, request: Request) -> TokenResponse:
     users: UserRepository = repo(request)
     user = await users.get_by_email(body.email)
-    if not user or not verify_password(body.password, user["password_hash"]):
+    if not user or not await verify_password(body.password, user["password_hash"]):
         # One message for both cases so we don't leak which emails exist.
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid credentials")
     return _token_response(request, user)

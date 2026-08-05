@@ -44,16 +44,16 @@ def board_channel(board_id: str) -> str:
     return f"events:board:{board_id}"
 
 
-NOTIFY_CHANNEL = "events:notify"
+# There is deliberately no notify channel any more. Mentions are durable jobs on
+# RabbitMQ (``collaberry_common.queue``) because an inbox row must survive
+# notification-service being down; pub/sub cannot promise that. Re-adding a
+# Redis notify publish here would give the mention two paths to one consumer and
+# duplicate every inbox row.
 
 
 async def publish_board_event(redis: Redis, event: BoardEvent) -> int:
     """Publish to the board's channel; returns the number of subscribers reached."""
     return await redis.publish(board_channel(event.board_id), _dumps(event))
-
-
-async def publish_notify_event(redis: Redis, event: BoardEvent) -> int:
-    return await redis.publish(NOTIFY_CHANNEL, _dumps(event))
 
 
 def _dumps(event: BoardEvent) -> str:

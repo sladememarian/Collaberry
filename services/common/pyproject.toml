@@ -11,6 +11,7 @@ dependencies = [
     "motor==3.6.0",
     "pymongo==4.9.2",
     "redis==5.2.1",
+    "aio-pika==9.5.4",
     "pydantic==2.9.2",
     "pydantic-settings==2.6.1",
     "PyJWT==2.9.0",

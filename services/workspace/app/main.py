@@ -10,6 +10,8 @@ sync consistent.
 
 from __future__ import annotations
 
+import contextlib
+import logging
 from contextlib import asynccontextmanager
 
 from fastapi import Depends, FastAPI, HTTPException, Request, status
@@ -21,7 +23,6 @@ from collaberry_common.events import (
     BoardEvent,
     EventType,
     publish_board_event,
-    publish_notify_event,
 )
 from collaberry_common.models import (
     BoardColumnCreate,
@@ -40,10 +41,13 @@ from collaberry_common.models import (
     WorkspacePublic,
 )
 from collaberry_common.redis_client import make_redis
+from collaberry_common.queue import JobPublisher, ROUTE_NOTIFY
 from collaberry_common.security import TokenClaims, load_public_key
 from collaberry_common.settings import get_settings
 
 from .repository import ConflictError, NotFound, WorkspaceRepository
+
+log = logging.getLogger(__name__)
 
 
 @asynccontextmanager
@@ -58,11 +62,13 @@ async def lifespan(app: FastAPI):
     await app.state.repo.ensure_indexes()
 
     app.state.redis = make_redis(settings)
+    app.state.queue = await JobPublisher.create(settings)
     try:
         yield
     finally:
         mongo.close()
         await app.state.redis.aclose()
+        await app.state.queue.close()
 
 
 app = FastAPI(
@@ -370,7 +376,22 @@ async def delete_comment(
 # Helpers
 # --------------------------------------------------------------------------- #
 async def _emit(request: Request, event_type: EventType, item: dict, actor_id: str) -> None:
-    """Publish a board event, and a notify event when someone got mentioned."""
+    """Fan the change out to live viewers, and enqueue any durable follow-up work.
+
+    Two transports on purpose, because the two messages have different
+    requirements:
+
+    * The board event goes over Redis pub/sub. It's for clients currently looking
+      at the board; if nobody is listening, dropping it is correct because the
+      next open refetches state.
+    * A mention becomes a *job* on RabbitMQ. Somebody must end up with a
+      notification row, so it has to survive notification-service being down at
+      this instant — which pub/sub cannot promise.
+
+    Neither failure is allowed to fail the user's write: the item is already
+    committed in Mongo by the time we get here, so returning 500 because a
+    broker hiccuped would tell the client its change was lost when it wasn't.
+    """
     payload = _to_item(item).model_dump(mode="json")
     event = BoardEvent(
         type=event_type,
@@ -380,14 +401,27 @@ async def _emit(request: Request, event_type: EventType, item: dict, actor_id: s
         payload=payload,
     )
     redis = request.app.state.redis
-    await publish_board_event(redis, event)
+    try:
+        await publish_board_event(redis, event)
+    except Exception:  # noqa: BLE001
+        log.exception("board event publish failed board=%s", item["board_id"])
 
     # Assignees other than the actor are "mentions" the notifier cares about.
     if event_type in {EventType.CARD_CREATED, EventType.CARD_UPDATED} and item.get("assignees"):
         if any(a != actor_id for a in item["assignees"]):
-            await publish_notify_event(
-                redis, BoardEvent(**{**event.model_dump(), "type": EventType.MENTION})
-            )
+            mention = BoardEvent(**{**event.model_dump(), "type": EventType.MENTION})
+            try:
+                await request.app.state.queue.publish(
+                    ROUTE_NOTIFY, mention.model_dump(mode="json")
+                )
+            except Exception:  # noqa: BLE001
+                # No pub/sub fallback here on purpose. notification-service
+                # consumes mentions from the queue only; publishing to the old
+                # channel as well would need a second consumer, and any window
+                # where both ran would write two inbox rows for one mention.
+                # The queue is durable and the connection self-heals, so the
+                # honest failure mode is a logged miss, not a silent duplicate.
+                log.exception("mention enqueue failed item=%s", item.get("id"))
 
 
 def _to_workspace(doc: dict) -> WorkspacePublic:

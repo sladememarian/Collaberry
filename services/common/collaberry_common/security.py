@@ -30,15 +30,41 @@ KEY_ID = "collaberry-signing-key-1"
 # --------------------------------------------------------------------------- #
 # Passwords
 # --------------------------------------------------------------------------- #
-def hash_password(plain: str) -> str:
+def _hash_password_sync(plain: str) -> str:
+    """Synchronous bcrypt hash — called from a thread pool, not the event loop."""
     return bcrypt.hashpw(plain.encode("utf-8"), bcrypt.gensalt(rounds=12)).decode("utf-8")
 
 
-def verify_password(plain: str, hashed: str) -> bool:
+def _verify_password_sync(plain: str, hashed: str) -> bool:
+    """Synchronous bcrypt verify — called from a thread pool, not the event loop."""
     try:
         return bcrypt.checkpw(plain.encode("utf-8"), hashed.encode("utf-8"))
     except (ValueError, TypeError):
         return False
+
+
+async def hash_password(plain: str) -> str:
+    """Hash a password without blocking the event loop.
+
+    bcrypt is CPU-bound and takes ~100-200ms at rounds=12. Running it on the
+    FastAPI request thread would block every other incoming request for that
+    duration. Offloading to the thread pool keeps signups and logins from
+    stalling the whole service.
+    """
+    import asyncio
+    loop = asyncio.get_running_loop()
+    return await loop.run_in_executor(None, _hash_password_sync, plain)
+
+
+async def verify_password(plain: str, hashed: str) -> bool:
+    """Verify a password without blocking the event loop.
+
+    Same rationale as hash_password: bcrypt.checkpw is CPU-bound and must not
+    run on the request handler thread.
+    """
+    import asyncio
+    loop = asyncio.get_running_loop()
+    return await loop.run_in_executor(None, _verify_password_sync, plain, hashed)
 
 
 # --------------------------------------------------------------------------- #

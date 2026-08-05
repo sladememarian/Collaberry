@@ -16,13 +16,15 @@ from fastapi.responses import ORJSONResponse
 
 from collaberry_common.auth_dep import current_user
 from collaberry_common.db import Mongo
+from collaberry_common.events import BoardEvent
 from collaberry_common.models import NotificationPublic
+from collaberry_common.queue import JobConsumer, QUEUE_NOTIFY, ROUTE_NOTIFY
 from collaberry_common.redis_client import make_redis
 from collaberry_common.security import TokenClaims, load_public_key
 from collaberry_common.settings import get_settings
 
 from .repository import NotificationRepository
-from .worker import run_worker
+from .worker import process_mention, run_worker
 
 
 @asynccontextmanager
@@ -37,6 +39,22 @@ async def lifespan(app: FastAPI):
     await app.state.repo.ensure_indexes()
     app.state.redis = make_redis(settings)
 
+    # Start the queue consumer for durable notification jobs
+    app.state.consumer = await JobConsumer.create(settings)
+
+    async def handle_notify_job(payload: dict) -> None:
+        """Turn one queued mention into inbox rows.
+
+        Raising here is meaningful: JobConsumer catches it, backs off, and
+        redelivers, so a transient Mongo blip retries instead of losing the
+        notification. Don't swallow exceptions in this function.
+        """
+        await process_mention(app.state.repo, BoardEvent.model_validate(payload))
+
+    await app.state.consumer.start(QUEUE_NOTIFY, ROUTE_NOTIFY, handle_notify_job)
+
+    # Deadline sweeps stay on a plain timer loop — there's no message to queue,
+    # and a missed tick self-corrects on the next one.
     worker_task = asyncio.create_task(run_worker(app), name="notification-worker")
     try:
         yield
@@ -44,8 +62,7 @@ async def lifespan(app: FastAPI):
         worker_task.cancel()
         with contextlib.suppress(asyncio.CancelledError):
             await worker_task
-        with contextlib.suppress(Exception):
-            await app.state._pubsub.aclose()
+        await app.state.consumer.close()
         mongo.close()
         await app.state.redis.aclose()
 

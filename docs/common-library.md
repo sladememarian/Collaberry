@@ -44,9 +44,26 @@ The cross-service event contract:
 - `BoardEvent` model — type, board/workspace/actor ids, a client-ready `payload`
   dict, and `ts` (server epoch-millis; used by tests and the storm harness to
   measure fan-out latency).
-- `board_channel(board_id)` → `events:board:{id}`, plus `NOTIFY_CHANNEL`.
-- `publish_board_event` / `publish_notify_event` / `parse_event` — orjson
-  serialisation both ways.
+- `board_channel(board_id)` → `events:board:{id}`.
+- `publish_board_event` / `parse_event` — orjson serialisation both ways.
+
+Board events are Redis pub/sub: at-most-once fan-out to whoever is watching the
+board right now, and a dropped one is harmless because clients refetch. Work
+that *must* happen regardless of who is connected — mention notifications —
+goes through `queue.py` instead.
+
+### `queue.py`
+The durable-job layer, on RabbitMQ via `aio-pika`. A direct exchange
+(`collaberry.jobs`) routes to `jobs.notify`, which dead-letters to
+`collaberry.jobs.dlx` → `jobs.notify.dead`.
+- `connect()` — `connect_robust`, so a broker restart self-heals.
+- `declare_topology(channel)` — idempotent, called by both producer and
+  consumer so neither has to start first.
+- `JobPublisher` — one connection/channel per process, `PERSISTENT` delivery.
+- `JobConsumer` — `prefetch_count = settings.amqp_prefetch`; a handler that
+  raises is retried with exponential backoff (attempt count in the
+  `x-collaberry-attempts` header) up to `amqp_max_retries`, then rejected to
+  the DLX. So handlers should raise on transient failure rather than swallow.
 
 ### `models.py`
 All Pydantic v2 domain models: auth I/O (`RegisterRequest` enforces ≥8-char
