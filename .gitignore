@@ -52,4 +52,5 @@ frontend/playwright/.cache/
 
 backup_files/
 .mimocode/
+mongo-backup/
 

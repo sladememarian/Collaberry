@@ -12,7 +12,7 @@ Defines 7 containers on one internal network (`nexus-net`):
 | `workspace-service` | FastAPI | No |
 | `presence-service` | FastAPI + WebSocket | No |
 | `notification-service` | FastAPI worker | No |
-| `envoy` | Edge proxy | **Yes — port 8088** (and 9901 for the admin UI) |
+| `envoy` | Edge proxy | **Yes — port 8080** (and 9901 for the admin UI) |
 
 Two named volumes: `mongo-data` (so your data survives `docker compose down`,
 but NOT `docker compose down -v` — the `-v` deletes it) and `keys` (the shared
@@ -23,9 +23,8 @@ Health checks gate startup order — e.g. `workspace-service` won't start until
 `mongo`, `redis`, and `auth-service` all report healthy — so a fresh `docker
 compose up` reliably comes up in the right sequence.
 
-**Why port 8088 and not 8080:** on this dev machine something else (a proxy
-agent) already answers on port 8080, so Envoy is mapped to 8088 instead. Inside
-Docker, Envoy still listens on 8080 — only the *host-visible* port changed.
+**Envoy on host port 8080**, which the boxd proxy exposes publicly as
+`envoy.collaberry.boxd.sh`. Inside the compose network Envoy listens on 8080.
 
 ## .env / .env.example
 
@@ -41,7 +40,7 @@ Shortcuts: `make up` (build+start), `make down` (stop, keep data), `make logs`,
 
 ## scripts/
 
-- **`lib.sh`** — shared helpers: `GATEWAY_URL` (defaults to `localhost:8088`),
+- **`lib.sh`** — shared helpers: `GATEWAY_URL` (defaults to `localhost:8080`),
   `wait_for_gateway` (polls the JWKS endpoint until Envoy answers), and a
   `NO_PROXY` export so `curl`/`httpx` don't get intercepted by a system proxy
   agent on this machine.

@@ -29,8 +29,8 @@ import { palette } from "@/theme/tokens";
 
 const PRESETS: { label: string; url: string }[] = [
   { label: "Build default", url: DEFAULT_API_BASE },
-  { label: "Android emulator", url: "http://10.0.2.2:8088" },
-  { label: "This machine", url: "http://localhost:8088" },
+  { label: "Android emulator", url: "http://10.0.2.2:8080" },
+  { label: "This machine", url: "http://localhost:8080" },
 ];
 
 type ProbeState =
@@ -143,7 +143,7 @@ export default function ServerSettingsScreen() {
             autoCapitalize="none"
             autoCorrect={false}
             keyboardType="url"
-            placeholder="https://your-server.example:8088"
+            placeholder="https://envoy.collaberry.boxd.sh"
             testID="settings-api-input"
             hint="Where the backend gateway listens. Include the port if it isn't 80/443."
           />
@@ -157,7 +157,7 @@ export default function ServerSettingsScreen() {
             autoCapitalize="none"
             autoCorrect={false}
             keyboardType="url"
-            placeholder="wss://your-server.example:8088"
+            placeholder="wss://envoy.collaberry.boxd.sh"
             testID="settings-ws-input"
             hint="Follows the API address automatically — only change it if your WebSocket host differs."
           />

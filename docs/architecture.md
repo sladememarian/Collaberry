@@ -4,7 +4,7 @@
 
 ```
  React Native app (Expo)
-        │  HTTP + WebSocket, one host: localhost:8088
+        │  HTTP + WebSocket, one host: envoy.collaberry.boxd.sh
         ▼
  ┌────────────────────  Envoy (edge proxy)  ────────────────────┐
  │  routing by path · CORS · rate limit · RS256 JWT verification │
@@ -20,8 +20,7 @@
 ```
 
 Everything except Envoy lives on an internal Docker bridge network (`nexus-net`)
-and is unreachable from the host. Envoy publishes host port **8088** (8080 was
-hijacked by a system proxy agent on the dev machine — see `infrastructure.md`).
+and is unreachable from the host. Envoy publishes host port **8080**.
 
 ## Why four services
 

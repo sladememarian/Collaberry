@@ -1,7 +1,7 @@
 # Envoy — the edge gateway
 
 **Config:** `infra/envoy/envoy.yaml` · **Image:** `envoyproxy/envoy:v1.31-latest`
-**Host ports:** `8088` (the only application entry point) and `9901` (admin, dev only)
+**Host ports:** `8080` (the only application entry point) and `9901` (admin, dev only)
 
 ## What it does
 
@@ -43,6 +43,5 @@ client never knows the backend is four services.
 - `idle_timeout: 900s` on downstream connections so long-lived sockets survive.
 - Clusters use `STRICT_DNS` — Docker's embedded DNS re-resolves service names,
   so a restarted container is picked up without an Envoy restart.
-- Why host port **8088**: a system proxy agent on the dev machine intercepts
-  port 8080 (`Connect Internal WebServer`), answering before Docker's forward.
-  Inside the compose network Envoy still listens on 8080.
+- Envoy listens on host port **8080**, which the boxd proxy exposes publicly as
+  `envoy.collaberry.boxd.sh`. Inside the compose network Envoy listens on 8080.
