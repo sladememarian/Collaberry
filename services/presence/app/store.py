@@ -4,7 +4,9 @@ Deliberately kept free of any WebSocket concern so it can be unit-tested against
 ``fakeredis`` in isolation. The three concepts:
 
 * **presence** — one short-TTL key per live connection, indexed in a set so we can
-  list who's on a board and self-heal stale entries.
+  list who's on a board and self-heal stale entries. The index carries its own
+  (longer) expiry, refreshed on join/heartbeat, so an abandoned board doesn't
+  leave an orphaned set behind.
 * **typing** — a 5s key per user; its mere existence means "typing".
 * **lock** — ``SET NX EX 30`` on an item, the collision guard the spec asks for.
 """
@@ -34,10 +36,23 @@ class PresenceStore:
     async def join(self, board_id: str, conn_id: str, user: dict) -> None:
         await self.redis.set(self._pkey(board_id, conn_id), orjson.dumps(user).decode(), ex=self.presence_ttl)
         await self.redis.sadd(self._pindex(board_id), conn_id)
+        # The index is the one structure here that Redis won't expire for us:
+        # SADD takes no TTL, and the lazy cleanup in list_presence only runs if
+        # somebody later opens the board. A board whose last viewer crashes (no
+        # `leave`) and is never revisited would otherwise keep its index set
+        # forever. Re-asserting the expiry on every join keeps it alive exactly
+        # as long as connections keep arriving, and lets it die with them.
+        # The window is generous vs presence_ttl so an active board's index is
+        # never dropped out from under its own live member keys.
+        await self.redis.expire(self._pindex(board_id), self.presence_ttl * 4)
 
     async def heartbeat(self, board_id: str, conn_id: str, user: dict) -> None:
         # Re-assert the key so an active connection never looks stale.
         await self.redis.set(self._pkey(board_id, conn_id), orjson.dumps(user).decode(), ex=self.presence_ttl)
+        # Keep the index alive alongside it — a long-lived socket sends
+        # heartbeats but never re-joins, so without this the index of a quiet
+        # board with one steady viewer would lapse while they're still on it.
+        await self.redis.expire(self._pindex(board_id), self.presence_ttl * 4)
 
     async def leave(self, board_id: str, conn_id: str) -> None:
         await self.redis.delete(self._pkey(board_id, conn_id))

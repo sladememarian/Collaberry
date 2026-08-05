@@ -69,3 +69,22 @@ async def test_presence_dedupes_same_user_multi_tab(st):
     await st.join("board-1", "conn-b", {"user_id": "alice", "display_name": "Ada"})
     users = await st.list_presence("board-1")
     assert len(users) == 1
+
+
+async def test_presence_index_has_expiry(st):
+    """Regression: the index set was the only Redis key with no TTL, so an
+    abandoned board (last viewer crashes, never re-opened) would leak its index
+    forever. join and heartbeat now refresh the index expiry alongside the
+    member keys so it dies with them."""
+    await st.join("board-x", "conn-1", {"user_id": "alice", "display_name": "A"})
+    idx_key = st._pindex("board-x")
+    ttl = await st.redis.ttl(idx_key)
+    # Should be ~180s (4 × presence_ttl). Check it's in a sane range rather
+    # than -1 (no expiry) or 0 (expired).
+    assert 120 < ttl <= 200, f"Index TTL {ttl} outside expected range"
+
+    # Heartbeat also refreshes it.
+    await st.redis.expire(idx_key, 10)
+    await st.heartbeat("board-x", "conn-1", {"user_id": "alice", "display_name": "A"})
+    ttl = await st.redis.ttl(idx_key)
+    assert 120 < ttl <= 200, f"Heartbeat didn't refresh index TTL"
