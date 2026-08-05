@@ -13,7 +13,8 @@ import { ActivityIndicator, Pressable, Text, View } from "react-native";
 import { ApiError } from "@/api/client";
 import { workspaceApi } from "@/api/endpoints";
 import { AppContainer } from "@/components/AppContainer";
-import { ArrowLeftIcon, ChecklistIcon, DocumentIcon, KanbanIcon } from "@/components/icons";
+import { ArrowLeftIcon, KanbanIcon } from "@/components/icons";
+import { CardDialog } from "@/components/item/CardDialog";
 import { DraggableBoard } from "@/components/kanban/DraggableBoard";
 import {
   DensityControl,
@@ -30,7 +31,7 @@ import { TextField } from "@/components/ui/TextField";
 import { useAuth } from "@/context/AuthContext";
 import { useBoardSocket } from "@/realtime/useBoardSocket";
 import { palette, type WorkspaceContext } from "@/theme/tokens";
-import type { Board, BoardChange, Column, Item, ItemType } from "@/types";
+import type { Board, BoardChange, Column, Item } from "@/types";
 
 export default function BoardScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -119,16 +120,21 @@ export default function BoardScreen() {
     load();
   }, [load, booting]);
 
-  // --- create card sheet -------------------------------------------------- //
-  const [sheetColumn, setSheetColumn] = useState<Column | null>(null);
-  const openAdd = useCallback((column: Column) => setSheetColumn(column), []);
+  // --- card dialog -------------------------------------------------------- //
+  // Held by id, not by value: the socket can rewrite `items` under us (someone
+  // else edits or deletes the open card), and deriving keeps the panel showing
+  // the live row — or closing itself when the row is gone.
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [createColumn, setCreateColumn] = useState<Column | null>(null);
   const [addColumnOpen, setAddColumnOpen] = useState(false);
 
-  const onCardPress = useCallback(
-    (item: Item) =>
-      router.push({ pathname: "/(app)/item/[id]", params: { id: item.id, boardId } }),
-    [router, boardId],
+  const editingItem = useMemo(
+    () => (editingId ? (items.find((i) => i.id === editingId) ?? null) : null),
+    [editingId, items],
   );
+
+  const onCardPress = useCallback((item: Item) => setEditingId(item.id), []);
+  const openAdd = useCallback((column: Column) => setCreateColumn(column), []);
 
   // Optimistically move a card to another lane, then persist (workspace-service
   // echoes a card.moved event, which reconciles into the same state).
@@ -194,7 +200,7 @@ export default function BoardScreen() {
           title="This board is empty"
           body="Add a card, a document, or a checklist to the first lane."
           ctaLabel="Add a card"
-          onCta={() => setSheetColumn(board.columns[0] ?? null)}
+          onCta={() => setCreateColumn(board.columns[0] ?? null)}
         />
       ) : (
         <DensityProvider value={density}>
@@ -217,13 +223,30 @@ export default function BoardScreen() {
         </DensityProvider>
       )}
 
-      <AddItemSheet
+      <CardDialog
+        open={Boolean(editingItem) || Boolean(createColumn)}
+        onClose={() => {
+          setEditingId(null);
+          setCreateColumn(null);
+        }}
+        column={createColumn}
         boardId={boardId}
-        column={sheetColumn}
-        onClose={() => setSheetColumn(null)}
+        item={editingItem}
+        lockedBy={
+          editingItem && cardLocks[editingItem.id]
+            ? cardLocks[editingItem.id]
+            : null
+        }
         onCreated={(item) => {
           setItems((prev) => (prev.some((p) => p.id === item.id) ? prev : [...prev, item]));
-          setSheetColumn(null);
+          setCreateColumn(null);
+        }}
+        onUpdated={(item) => {
+          setItems((prev) => prev.map((p) => (p.id === item.id ? item : p)));
+        }}
+        onOpenFull={(item) => {
+          setEditingId(null);
+          router.push({ pathname: "/(app)/item/[id]", params: { id: item.id, boardId } });
         }}
       />
 
@@ -332,100 +355,6 @@ function SortControl({
         })}
       </View>
     </View>
-  );
-}
-
-// --------------------------------------------------------------------------- //
-const TYPE_OPTIONS: { type: ItemType; label: string; hint: string; icon: (c: string) => React.ReactNode }[] = [
-  { type: "card", label: "Task card", hint: "A simple task with a description", icon: (c) => <KanbanIcon size={20} color={c} strokeWidth={1.9} /> },
-  { type: "document", label: "Document", hint: "A rich page of blocks", icon: (c) => <DocumentIcon size={20} color={c} strokeWidth={1.9} /> },
-  { type: "checklist", label: "Checklist", hint: "A tickable list", icon: (c) => <ChecklistIcon size={20} color={c} strokeWidth={1.9} /> },
-];
-
-function AddItemSheet({
-  boardId,
-  column,
-  onClose,
-  onCreated,
-}: {
-  boardId: string;
-  column: Column | null;
-  onClose: () => void;
-  onCreated: (item: Item) => void;
-}) {
-  const [title, setTitle] = useState("");
-  const [type, setType] = useState<ItemType>("card");
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (column) {
-      setTitle("");
-      setType("card");
-      setError(null);
-    }
-  }, [column]);
-
-  const submit = async () => {
-    if (!column) return;
-    if (!title.trim()) return setError("Give it a title.");
-    setBusy(true);
-    setError(null);
-    try {
-      const data =
-        type === "document"
-          ? { blocks: [{ type: "paragraph", text: "" }] }
-          : type === "checklist"
-            ? { entries: [] }
-            : { description: "" };
-      const item = await workspaceApi.createItem(boardId, {
-        type,
-        title: title.trim(),
-        column_id: column.id,
-        data,
-      });
-      onCreated(item);
-    } catch (e) {
-      setError(e instanceof ApiError ? e.message : "Couldn't add that card. Check your connection and try again.");
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  return (
-    <Sheet open={Boolean(column)} onClose={onClose} title={column ? `Add to ${column.name}` : "Add"}>
-      <View className="gap-4">
-        <TextField label="Title" value={title} onChangeText={setTitle} placeholder="What needs doing?" error={error} />
-        <View>
-          <Text className="mb-2 text-sub font-medium text-text-mid">Type</Text>
-          <View className="gap-2">
-            {TYPE_OPTIONS.map((o) => {
-              const on = o.type === type;
-              return (
-                <Pressable
-                  key={o.type}
-                  onPress={() => setType(o.type)}
-                  className="flex-row items-center gap-3 rounded-md border p-3"
-                  style={{
-                    borderColor: on ? palette.purple : palette.border,
-                    backgroundColor: on ? "rgba(168,85,247,0.10)" : "transparent",
-                  }}
-                >
-                  <View className="h-9 w-9 items-center justify-center rounded-md bg-ink-raised">
-                    {o.icon(on ? palette.purpleSoft : palette.textMid)}
-                  </View>
-                  <View className="flex-1">
-                    <Text className="text-body font-semibold text-text-hi">{o.label}</Text>
-                    <Text className="text-sub text-text-low">{o.hint}</Text>
-                  </View>
-                </Pressable>
-              );
-            })}
-          </View>
-        </View>
-        <Button label="Add" onPress={submit} loading={busy} full />
-      </View>
-    </Sheet>
   );
 }
 
