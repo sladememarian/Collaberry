@@ -14,9 +14,9 @@ npm run web          # or: npm start → scan QR in Expo Go
 npm run type-check   # tsc --noEmit
 ```
 
-The API host defaults to `http://localhost:8088` (Envoy). On a physical phone,
-point at your machine instead:
-`EXPO_PUBLIC_API_URL=http://<your-LAN-IP>:8088 npm start`
+The API host defaults to `https://envoy.collaberry.boxd.sh` (Envoy via the boxd
+proxy). On a physical phone or local dev, point at your machine instead:
+`EXPO_PUBLIC_API_URL=http://<your-LAN-IP>:8080 npm start`
 
 ## Routes (`app/` — Expo Router file-based)
 
@@ -91,7 +91,7 @@ and `BoardChange`.
 
 - **`app.json`** — Expo config: dark UI, `collaberry` scheme, typed routes,
   plugins (router, secure-store, status-bar, splash, localization), and the
-  `extra.apiBaseUrl` / `wsBaseUrl` defaults (`localhost:8088`).
+  `extra.apiBaseUrl` / `wsBaseUrl` defaults (`envoy.collaberry.boxd.sh`).
 - **`babel.config.js`** — `babel-preset-expo` with `jsxImportSource: nativewind`
   + `nativewind/babel`, and the `@ → ./src` module-resolver alias.
 - **`metro.config.js`** — Expo default config wrapped in `withNativeWind`
