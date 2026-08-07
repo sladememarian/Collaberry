@@ -30,6 +30,18 @@ export const authApi = {
 
   me: () => request<UserPublic>("/api/v1/auth/me"),
 
+  /**
+   * Update your own profile. Returns a full TokenResponse, not a UserPublic:
+   * `display_name` is a JWT claim, so a rename only reaches presence-service
+   * (which labels live cursors from the token) once the caller swaps in the
+   * re-signed token this hands back.
+   */
+  updateProfile: (patch: {
+    display_name?: string;
+    current_password?: string;
+    new_password?: string;
+  }) => request<TokenResponse>("/api/v1/auth/me", { method: "PATCH", body: patch }),
+
   // Members are added to a workspace by user id, but a human only knows an email;
   // this resolves one to the other so the add-member flow can hand off to addMember.
   userByEmail: (email: string) =>

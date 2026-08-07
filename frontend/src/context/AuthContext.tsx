@@ -26,6 +26,13 @@ interface AuthState {
   signIn: (email: string, password: string) => Promise<void>;
   signUp: (email: string, password: string, displayName: string) => Promise<void>;
   signOut: () => Promise<void>;
+  /**
+   * Apply a profile edit. Takes the whole re-signed session rather than just
+   * the new user, because `display_name` lives in the JWT claims — keeping the
+   * old token would leave the rename invisible to presence-service, which
+   * labels live cursors from the token and not from a database read.
+   */
+  applySession: (token: string, user: UserPublic) => Promise<void>;
 }
 
 const AuthContext = createContext<AuthState | null>(null);
@@ -95,9 +102,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     await persist(null, null);
   }, [persist]);
 
+  const applySession = useCallback(
+    async (t: string, u: UserPublic) => {
+      await persist(t, u);
+    },
+    [persist],
+  );
+
   const value = useMemo<AuthState>(
-    () => ({ user, token, booting, signIn, signUp, signOut }),
-    [user, token, booting, signIn, signUp, signOut],
+    () => ({ user, token, booting, signIn, signUp, signOut, applySession }),
+    [user, token, booting, signIn, signUp, signOut, applySession],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
