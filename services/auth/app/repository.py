@@ -7,6 +7,8 @@ difference.
 
 from __future__ import annotations
 
+from pymongo import ReturnDocument
+
 from collaberry_common.db import Mongo, oid_to_str
 from collaberry_common.models import utcnow
 from collaberry_common.security import hash_password
@@ -62,3 +64,32 @@ class UserRepository:
         result = await self._users.insert_one(doc)
         doc["_id"] = result.inserted_id
         return oid_to_str(doc)  # type: ignore[return-value]
+
+    async def update_profile(
+        self, user_id: str, *, display_name: str | None = None, password: str | None = None
+    ) -> dict | None:
+        """Apply a partial profile edit; returns the updated user, or None if gone.
+
+        Hashing happens here rather than in the route so the plaintext password
+        never travels further into the app than it has to.
+        """
+        from bson import ObjectId
+
+        try:
+            oid = ObjectId(user_id)
+        except Exception:
+            return None
+
+        changes: dict = {}
+        if display_name is not None:
+            changes["display_name"] = display_name
+        if password is not None:
+            changes["password_hash"] = await hash_password(password)
+        if not changes:
+            return await self.get_by_id(user_id)
+
+        return oid_to_str(
+            await self._users.find_one_and_update(
+                {"_id": oid}, {"$set": changes}, return_document=ReturnDocument.AFTER
+            )
+        )

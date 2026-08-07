@@ -58,6 +58,22 @@ class UserPublic(BaseModel):
     created_at: datetime
 
 
+class ProfileUpdate(BaseModel):
+    """A self-service profile edit. Every field is optional — omitted means
+    "leave alone", which is what lets the UI PATCH just the one thing changed.
+
+    Email is deliberately absent: it's the login identity and the key workspace
+    invites resolve against, so changing it needs a verification flow rather
+    than a field on this form.
+    """
+
+    display_name: str | None = Field(default=None, min_length=1, max_length=80)
+    # Changing a password requires proving you know the current one, so that a
+    # leaked token can't be used to lock the real owner out of their account.
+    current_password: str | None = None
+    new_password: str | None = Field(default=None, min_length=8, max_length=256)
+
+
 class TokenResponse(BaseModel):
     access_token: str
     token_type: Literal["bearer"] = "bearer"

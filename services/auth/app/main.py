@@ -17,6 +17,7 @@ from collaberry_common.auth_dep import current_user
 from collaberry_common.db import Mongo
 from collaberry_common.models import (
     LoginRequest,
+    ProfileUpdate,
     RegisterRequest,
     TokenResponse,
     UserPublic,
@@ -133,6 +134,41 @@ async def me(request: Request, claims: TokenClaims = Depends(current_user)) -> U
         display_name=user["display_name"],
         created_at=user["created_at"],
     )
+
+
+@app.patch("/api/v1/auth/me", response_model=TokenResponse, tags=["auth"])
+async def update_me(
+    body: ProfileUpdate, request: Request, claims: TokenClaims = Depends(current_user)
+) -> TokenResponse:
+    """Update your own profile.
+
+    Returns a fresh TokenResponse rather than a bare UserPublic on purpose:
+    ``display_name`` is a *claim* inside the JWT, and presence-service labels
+    live cursors from the token, not from a database read. Handing back a
+    re-signed token is what stops a renamed user showing up under their old name
+    to everyone on the board until their session expires.
+    """
+    users: UserRepository = repo(request)
+    user = await users.get_by_id(claims.user_id)
+    if not user:
+        raise HTTPException(status_code=404, detail="User no longer exists")
+
+    if body.new_password is not None:
+        if not body.current_password:
+            raise HTTPException(
+                status_code=400, detail="Enter your current password to set a new one"
+            )
+        if not await verify_password(body.current_password, user["password_hash"]):
+            raise HTTPException(status_code=403, detail="That current password isn't right")
+
+    updated = await users.update_profile(
+        claims.user_id,
+        display_name=body.display_name.strip() if body.display_name else None,
+        password=body.new_password,
+    )
+    if not updated:
+        raise HTTPException(status_code=404, detail="User no longer exists")
+    return _token_response(request, updated)
 
 
 @app.get("/api/v1/auth/users/by-ids", response_model=list[UserPublic], tags=["auth"])
