@@ -13,7 +13,8 @@ import { ActivityIndicator, Pressable, Text, View } from "react-native";
 import { ApiError } from "@/api/client";
 import { workspaceApi } from "@/api/endpoints";
 import { AppContainer } from "@/components/AppContainer";
-import { ArrowLeftIcon, KanbanIcon } from "@/components/icons";
+import { BoardSearchBar, itemMatches } from "@/components/board/BoardSearchBar";
+import { ArrowLeftIcon, KanbanIcon, SearchIcon } from "@/components/icons";
 import { CardDialog } from "@/components/item/CardDialog";
 import { DraggableBoard } from "@/components/kanban/DraggableBoard";
 import {
@@ -29,6 +30,7 @@ import { ConnectionDot, EmptyState } from "@/components/ui/EmptyState";
 import { Sheet } from "@/components/ui/Sheet";
 import { TextField } from "@/components/ui/TextField";
 import { useAuth } from "@/context/AuthContext";
+import { useScreenSearch } from "@/context/ScreenActions";
 import { useBoardSocket } from "@/realtime/useBoardSocket";
 import { palette, type WorkspaceContext } from "@/theme/tokens";
 import type { Board, BoardChange, Column, Item } from "@/types";
@@ -48,6 +50,21 @@ export default function BoardScreen() {
   const [density, setDensity] = usePersistedDensity();
   const [deleteTarget, setDeleteTarget] = useState<Column | null>(null);
   const [deleteError, setDeleteError] = useState<string | null>(null);
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [query, setQuery] = useState("");
+
+  // Publish search to the nav rail for as long as this screen is mounted; the
+  // rail hides the entry everywhere else, since nothing else has a card list.
+  const openSearch = useCallback(() => setSearchOpen(true), []);
+  useScreenSearch(openSearch);
+
+  // Filter the *rendered* list only. Mutations (move, update, delete) still run
+  // against the full `items`, so a card that's currently filtered out doesn't
+  // vanish from the board's real state.
+  const visibleItems = useMemo(
+    () => (query.trim() ? items.filter((i) => itemMatches(i, query)) : items),
+    [items, query],
+  );
 
   // Robust back: a board opened via a deep link (or after the item modal ate the
   // history entry) leaves router.back() with nothing to pop on web — it no-ops
@@ -185,7 +202,23 @@ export default function BoardScreen() {
         onBack={goBack}
         presence={socket.presence}
         connected={socket.connected}
+        onSearch={items.length > 0 ? () => setSearchOpen(true) : undefined}
       />
+
+      {searchOpen ? (
+        <BoardSearchBar
+          query={query}
+          onQueryChange={setQuery}
+          onClose={() => {
+            setSearchOpen(false);
+            // Clear on close: leaving a filter applied behind a closed search bar
+            // is how you end up convinced cards have gone missing.
+            setQuery("");
+          }}
+          matchCount={visibleItems.length}
+          totalCount={items.length}
+        />
+      ) : null}
 
       {items.length > 0 ? (
         <View className="flex-row items-center justify-between gap-3 px-4 pb-2 pt-3">
@@ -206,7 +239,7 @@ export default function BoardScreen() {
         <DensityProvider value={density}>
           <DraggableBoard
             board={board}
-            items={items}
+            items={visibleItems}
             workspaceContext={context}
             locks={cardLocks}
             onCardPress={onCardPress}
@@ -293,11 +326,14 @@ function BoardHeader({
   onBack,
   presence,
   connected,
+  onSearch,
 }: {
   title: string;
   onBack: () => void;
   presence: { user_id: string; display_name: string }[];
   connected: boolean;
+  /** Omitted when there's nothing to search — an empty board. */
+  onSearch?: () => void;
 }) {
   return (
     <View className="flex-row items-center gap-3 border-b border-ink-border/60 px-4 pb-3 pt-1">
@@ -310,6 +346,18 @@ function BoardHeader({
         </Text>
         <ConnectionDot connected={connected} />
       </View>
+      {onSearch ? (
+        <Pressable
+          onPress={onSearch}
+          hitSlop={8}
+          accessibilityRole="button"
+          accessibilityLabel="Search cards"
+          testID="board-search-open"
+          className="h-9 w-9 items-center justify-center rounded-full bg-ink-raised"
+        >
+          <SearchIcon size={18} color={palette.textHi} />
+        </Pressable>
+      ) : null}
       {presence.length > 0 ? <AvatarStack people={presence} /> : null}
     </View>
   );
