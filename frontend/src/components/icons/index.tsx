@@ -280,14 +280,62 @@ export function BerryMark({ size = 28 }: { size?: number }) {
   );
 }
 
-export function GearIcon({ size = 20, color = palette.textHi, strokeWidth = 2 }: IconProps) {
-  return (
+export function GearIcon({ size = 20, color = palette.textHi, strokeWidth = 2 }: IconProps) {  return (
     <Svg {...base(size)}>
       <Circle cx="12" cy="12" r="3.2" {...stroke(color, strokeWidth)} />
       <Path
         d="M19.4 15a1.7 1.7 0 0 0 .34 1.87l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.7 1.7 0 0 0-1.87-.34 1.7 1.7 0 0 0-1.03 1.56V21a2 2 0 1 1-4 0v-.09a1.7 1.7 0 0 0-1.11-1.56 1.7 1.7 0 0 0-1.87.34l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.7 1.7 0 0 0 .34-1.87 1.7 1.7 0 0 0-1.56-1.03H3a2 2 0 1 1 0-4h.09a1.7 1.7 0 0 0 1.56-1.11 1.7 1.7 0 0 0-.34-1.87l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.7 1.7 0 0 0 1.87.34h.09A1.7 1.7 0 0 0 10 3.09V3a2 2 0 1 1 4 0v.09a1.7 1.7 0 0 0 1.03 1.56 1.7 1.7 0 0 0 1.87-.34l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.7 1.7 0 0 0-.34 1.87v.09A1.7 1.7 0 0 0 20.91 10H21a2 2 0 1 1 0 4h-.09a1.7 1.7 0 0 0-1.51 1z"
         {...stroke(color, strokeWidth * 0.85)}
       />
+    </Svg>
+  );
+}
+
+export function HomeIcon({ size = 22, color = palette.textHi, strokeWidth = 2 }: IconProps) {
+  return (
+    <Svg {...base(size)}>
+      <Path d="M3.5 10.5 12 3.8l8.5 6.7V19a1.6 1.6 0 0 1-1.6 1.6H5.1A1.6 1.6 0 0 1 3.5 19z" {...stroke(color, strokeWidth)} />
+      <Path d="M9.6 20.6v-6.2h4.8v6.2" {...stroke(color, strokeWidth)} />
+    </Svg>
+  );
+}
+
+export function MoonIcon({ size = 20, color = palette.textHi, strokeWidth = 2 }: IconProps) {
+  return (
+    <Svg {...base(size)}>
+      <Path d="M20.2 14.4A8.4 8.4 0 1 1 9.6 3.8a6.6 6.6 0 0 0 10.6 10.6z" {...stroke(color, strokeWidth)} />
+    </Svg>
+  );
+}
+
+export function SunIcon({ size = 20, color = palette.textHi, strokeWidth = 2 }: IconProps) {
+  // Eight rays, drawn from the axes/diagonals so the icon stays symmetric at
+  // any size rather than hand-placing sixteen coordinates.
+  const rays: [number, number][] = [
+    [0, -1], [0, 1], [-1, 0], [1, 0],
+    [-0.7, -0.7], [0.7, -0.7], [-0.7, 0.7], [0.7, 0.7],
+  ];
+  return (
+    <Svg {...base(size)}>
+      <Circle cx="12" cy="12" r="4.2" {...stroke(color, strokeWidth)} />
+      {rays.map(([dx, dy], i) => (
+        <Line
+          key={i}
+          x1={12 + dx * 6.6}
+          y1={12 + dy * 6.6}
+          x2={12 + dx * 9}
+          y2={12 + dy * 9}
+          {...stroke(color, strokeWidth)}
+        />
+      ))}
+    </Svg>
+  );
+}
+
+export function ChevronLeftIcon({ size = 20, color = palette.textHi, strokeWidth = 2 }: IconProps) {
+  return (
+    <Svg {...base(size)}>
+      <Polyline points="14.5 5 8 12 14.5 19" {...stroke(color, strokeWidth)} />
     </Svg>
   );
 }
