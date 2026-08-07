@@ -28,6 +28,10 @@ async def process_mention(repo: NotificationRepository, event: BoardEvent) -> in
     payload = event.payload
     assignees = payload.get("assignees", [])
     title = payload.get("title", "a card")
+    # An id in an inbox line reads as a glitch, not a person. The publisher
+    # carries the name for exactly this; "Someone" covers an event minted before
+    # the field existed, which is still truthful.
+    actor = event.actor_name.strip() or "Someone"
     created = 0
     for user_id in assignees:
         if user_id == event.actor_id:
@@ -36,7 +40,7 @@ async def process_mention(repo: NotificationRepository, event: BoardEvent) -> in
             user_id=user_id,
             kind="mention",
             title="You were assigned",
-            body=f"{event.actor_id} assigned you to “{title}”.",
+            body=f"{actor} assigned you to “{title}”.",
             board_id=event.board_id,
             item_id=payload.get("id"),
         )

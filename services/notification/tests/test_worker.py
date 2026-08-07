@@ -44,6 +44,44 @@ async def test_mention_notifies_everyone_but_the_actor(repo):
     assert await repo.list_for_user("alice") == []
 
 
+async def test_mention_body_names_the_actor_not_their_id(repo):
+    """An inbox line must read like a sentence about a person.
+
+    The publisher carries ``actor_name`` precisely so the worker never has to
+    fall back to the raw ObjectId, which renders as
+    "6a735cba202232e3b6170493 assigned you to ..." — indistinguishable from a bug.
+    """
+    event = BoardEvent(
+        type=EventType.MENTION,
+        board_id="b1",
+        workspace_id="w1",
+        actor_id="6a735cba202232e3b6170493",
+        actor_name="Amirpouyan",
+        payload={"id": "card-1", "title": "Ship it", "assignees": ["bob"]},
+    )
+    await process_mention(repo, event)
+
+    body = (await repo.list_for_user("bob"))[0]["body"]
+    assert body.startswith("Amirpouyan assigned you to")
+    assert "6a735cba202232e3b6170493" not in body
+
+
+async def test_mention_body_falls_back_when_the_actor_has_no_name(repo):
+    """An event minted before ``actor_name`` existed still has to read sanely."""
+    event = BoardEvent(
+        type=EventType.MENTION,
+        board_id="b1",
+        workspace_id="w1",
+        actor_id="6a735cba202232e3b6170493",
+        payload={"id": "card-1", "title": "Ship it", "assignees": ["bob"]},
+    )
+    await process_mention(repo, event)
+
+    body = (await repo.list_for_user("bob"))[0]["body"]
+    assert body.startswith("Someone assigned you to")
+    assert "6a735cba202232e3b6170493" not in body
+
+
 async def test_deadline_sweep_fires_once_per_user(repo):
     # Seed an item due in 2 hours, assigned to bob.
     soon = utcnow() + timedelta(hours=2)

@@ -284,7 +284,7 @@ async def create_item(
         )
     except NotFound as exc:
         raise HTTPException(status_code=404, detail=str(exc) or "Board not found")
-    await _emit(request, EventType.CARD_CREATED, item, claims.user_id)
+    await _emit(request, EventType.CARD_CREATED, item, claims)
     return _to_item(item)
 
 
@@ -303,7 +303,7 @@ async def update_item(
 
     # A column change is a "move" for the client's animation; otherwise "update".
     moved = before["column_id"] != item["column_id"]
-    await _emit(request, EventType.CARD_MOVED if moved else EventType.CARD_UPDATED, item, claims.user_id)
+    await _emit(request, EventType.CARD_MOVED if moved else EventType.CARD_UPDATED, item, claims)
     return _to_item(item)
 
 
@@ -313,7 +313,7 @@ async def delete_item(item_id: str, request: Request, claims: TokenClaims = Depe
         item = await repo(request).delete_item(item_id, claims.user_id)
     except NotFound:
         raise HTTPException(status_code=404, detail="Item not found")
-    await _emit(request, EventType.CARD_DELETED, item, claims.user_id)
+    await _emit(request, EventType.CARD_DELETED, item, claims)
     return None
 
 
@@ -375,7 +375,7 @@ async def delete_comment(
 # --------------------------------------------------------------------------- #
 # Helpers
 # --------------------------------------------------------------------------- #
-async def _emit(request: Request, event_type: EventType, item: dict, actor_id: str) -> None:
+async def _emit(request: Request, event_type: EventType, item: dict, actor: TokenClaims) -> None:
     """Fan the change out to live viewers, and enqueue any durable follow-up work.
 
     Two transports on purpose, because the two messages have different
@@ -397,7 +397,8 @@ async def _emit(request: Request, event_type: EventType, item: dict, actor_id: s
         type=event_type,
         board_id=item["board_id"],
         workspace_id=item["workspace_id"],
-        actor_id=actor_id,
+        actor_id=actor.user_id,
+        actor_name=actor.display_name,
         payload=payload,
     )
     redis = request.app.state.redis
@@ -408,7 +409,7 @@ async def _emit(request: Request, event_type: EventType, item: dict, actor_id: s
 
     # Assignees other than the actor are "mentions" the notifier cares about.
     if event_type in {EventType.CARD_CREATED, EventType.CARD_UPDATED} and item.get("assignees"):
-        if any(a != actor_id for a in item["assignees"]):
+        if any(a != actor.user_id for a in item["assignees"]):
             mention = BoardEvent(**{**event.model_dump(), "type": EventType.MENTION})
             try:
                 await request.app.state.queue.publish(

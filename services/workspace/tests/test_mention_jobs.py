@@ -45,6 +45,9 @@ async def test_assigning_someone_else_enqueues_mention(ctx):
     _, payload = ctx.queue.published[0]
     assert payload["type"] == "mention"
     assert payload["actor_id"] == "alice"
+    # The consumer can't resolve a user id (it doesn't own the users collection),
+    # so the name has to ride along or the inbox line shows an ObjectId.
+    assert payload["actor_name"] == "alice"
     assert payload["payload"]["assignees"] == ["bob"]
 
 

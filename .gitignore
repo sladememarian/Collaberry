@@ -49,6 +49,9 @@ frontend/test-results/
 frontend/playwright-report/
 frontend/blob-report/
 frontend/playwright/.cache/
+# ...and the stray run dir Playwright leaves when invoked from the repo root
+# rather than from frontend/.
+test-results/
 
 backup_files/
 .mimocode/

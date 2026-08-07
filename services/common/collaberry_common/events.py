@@ -34,6 +34,12 @@ class BoardEvent(BaseModel):
     board_id: str
     workspace_id: str
     actor_id: str
+    # Who made the change, in human terms. Carried on the event because the
+    # consumers (notification-service, WS clients) have no way to resolve a user
+    # id — notification-service doesn't own the users collection, and asking
+    # auth-service per job would couple a background worker to a live HTTP hop.
+    # Optional so an event published by an older service still validates.
+    actor_name: str = ""
     # The affected item, already serialised for the client (id, column, order…).
     payload: dict = Field(default_factory=dict)
     # Server timestamp in epoch millis — the WS clients use it to measure fan-out.

@@ -18,6 +18,12 @@ class Mongo:
             settings.mongo_uri,
             uuidRepresentation="standard",
             serverSelectionTimeoutMS=5000,
+            # BSON has no timezone, so without this every datetime comes back
+            # naive and serialises with no offset ("2026-08-05T15:54:39"). A
+            # client then parses it as *local* time: a notification written a
+            # second ago reads as "3h ago" east of UTC. We write aware UTC via
+            # utcnow(), so read it back the same way.
+            tz_aware=True,
         )
         self._db: AsyncIOMotorDatabase = self._client[settings.mongo_db]
 
