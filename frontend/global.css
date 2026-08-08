@@ -49,6 +49,18 @@
 }
 
 /*
+ * The page itself, so the very first paint — and the brief moment while
+ * ThemeProvider reads the persisted choice out of storage and renders nothing —
+ * is the void rather than the browser's white default. Written as a var so it
+ * follows the theme switch along with everything else.
+ */
+html,
+body,
+#root {
+  background-color: rgb(var(--ink-void));
+}
+
+/*
  * Theme transition. Only background/border/text colors animate — animating
  * `all` would drag transforms and opacity into it and fight Reanimated's
  * board-drag animations. Suppressed entirely under reduce-motion.

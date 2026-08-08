@@ -32,7 +32,7 @@ import { TextField } from "@/components/ui/TextField";
 import { useAuth } from "@/context/AuthContext";
 import { useScreenSearch } from "@/context/ScreenActions";
 import { useBoardSocket } from "@/realtime/useBoardSocket";
-import { palette, type WorkspaceContext } from "@/theme/tokens";
+import { alpha, palette, type WorkspaceContext } from "@/theme/tokens";
 import type { Board, BoardChange, Column, Item } from "@/types";
 
 export default function BoardScreen() {
@@ -392,7 +392,7 @@ function SortControl({
               className="rounded-md border px-2.5 py-1"
               style={{
                 borderColor: on ? palette.purple : palette.border,
-                backgroundColor: on ? "rgba(168,85,247,0.10)" : "transparent",
+                backgroundColor: on ? alpha(palette.purple, 0.1) : "transparent",
               }}
             >
               <Text className="text-meta font-medium" style={{ color: on ? palette.purpleSoft : palette.textMid }}>

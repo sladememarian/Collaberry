@@ -39,7 +39,7 @@ export function Checkbox({
           checked ? glow(accent, 8) : null,
         ]}
       >
-        {checked ? <CheckIcon size={14} color="#0A0A0C" strokeWidth={3} /> : null}
+        {checked ? <CheckIcon size={14} color={palette.void} strokeWidth={3} /> : null}
       </View>
     </Pressable>
   );

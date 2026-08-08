@@ -7,7 +7,7 @@ import React from "react";
 import { Platform, Text, View } from "react-native";
 
 import { apiUsesLoopback, getApiBase } from "@/api/client";
-import { palette } from "@/theme/tokens";
+import { alpha, palette } from "@/theme/tokens";
 
 export function NetworkHint() {
   // Web + iOS simulator are fine with localhost. Emulator gets rewritten to
@@ -23,8 +23,8 @@ export function NetworkHint() {
         padding: 12,
         borderRadius: 12,
         borderWidth: 1,
-        borderColor: "rgba(251,191,36,0.45)",
-        backgroundColor: "rgba(251,191,36,0.10)",
+        borderColor: alpha(palette.warn, 0.45),
+        backgroundColor: alpha(palette.warn, 0.1),
       }}
     >
       <Text style={{ color: palette.warn, fontSize: 13, fontWeight: "700", marginBottom: 4 }}>

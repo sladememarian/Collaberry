@@ -57,3 +57,25 @@ backup_files/
 .mimocode/
 mongo-backup/
 
+# Vendored Lovable landing-page project — the source of the marketing page that
+# frontend/scripts/build-landing.mjs compiles into frontend/public/landing/. It's
+# a separate stack (TanStack Start + Vite + Tailwind v4) with its own dependency
+# tree, so `npm install` in frontend/ does not reach it.
+#
+# Tracked, because it is now the only source for a page we ship. What follows are
+# the parts of it that must NOT be:
+#
+#   · .workspace/ holds a Lovable access token in .git/config's remote URL. This
+#     rule is the one thing standing between that credential and the history —
+#     do not relax it. (The token predates this repo and is worth rotating.)
+#   · .git is a dangling gitfile pointing into a Nix store path from the
+#     container Lovable generated it in. Left in place, git reads the folder as a
+#     gitlink and silently stages nothing but an unresolvable commit pointer.
+frontend/LandingPage/.workspace/
+frontend/LandingPage/.lovable/
+frontend/LandingPage/.git
+frontend/LandingPage/.tanstack/
+frontend/LandingPage/.output/
+frontend/LandingPage/tsconfig.tsbuildinfo
+# `dist/` and `node_modules/` above already cover this project's build output.
+

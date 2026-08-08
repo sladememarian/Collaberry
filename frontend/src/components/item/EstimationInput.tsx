@@ -7,7 +7,7 @@ import { Platform, Pressable, Text, TextInput, View } from "react-native";
 
 import { QuestionIcon } from "@/components/icons";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
-import { palette } from "@/theme/tokens";
+import { alpha, palette } from "@/theme/tokens";
 import { formatEstimation, hoursToXdYh, parseEstimation } from "@/utils/estimation";
 
 export const ESTIMATION_HELP_TEXT =
@@ -74,7 +74,7 @@ export function EstimationInput({
         className="rounded-md border p-3 text-body text-text-mid"
         style={{
           borderColor: invalid ? palette.danger : palette.border,
-          backgroundColor: "rgba(255,255,255,0.03)",
+          backgroundColor: alpha(palette.textHi, 0.04),
         }}
       />
       <Text testID="estimation-preview" className="mt-1.5 text-meta text-text-faint">

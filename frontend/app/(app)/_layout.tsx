@@ -18,6 +18,7 @@ import { ProfilePanel } from "@/components/profile/ProfilePanel";
 import { useAuth } from "@/context/AuthContext";
 import { NotificationProvider } from "@/context/NotificationContext";
 import { ScreenActionsContext } from "@/context/ScreenActions";
+import { useTheme } from "@/theme/ThemeContext";
 import { palette } from "@/theme/tokens";
 
 export default function AppLayout() {
@@ -25,6 +26,14 @@ export default function AppLayout() {
   const [profileOpen, setProfileOpen] = useState(false);
   const [notificationsOpen, setNotificationsOpen] = useState(false);
   const [onSearch, setOnSearch] = useState<(() => void) | null>(null);
+
+  // The shell paints two full-height surfaces of its own, and neither can be a
+  // Tailwind class: react-native-web strips `var()` out of the style prop, and
+  // `contentStyle` is a navigator option rather than an element. So they're
+  // snapshots, and this subscription is what makes the switch reach them —
+  // together with NavRail, which reads `palette` at its top level and re-renders
+  // with us because it's rendered as JSX here rather than passed in as children.
+  useTheme();
 
   // Wrapped in a setter-function so React doesn't mistake the handler itself
   // for a state updater and call it.

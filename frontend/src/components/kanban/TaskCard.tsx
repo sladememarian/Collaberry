@@ -11,7 +11,7 @@ import { Avatar } from "@/components/ui/Avatar";
 import { ContextBadge, TagChip } from "@/components/ui/Badge";
 import { GlassCard } from "@/components/ui/GlassCard";
 import { priorityMeta } from "@/theme/priority";
-import { contextAccent, palette, type WorkspaceContext } from "@/theme/tokens";
+import { alpha, contextAccent, palette, type WorkspaceContext } from "@/theme/tokens";
 import type { CardData, ChecklistData, Item } from "@/types";
 
 import { useDensity } from "./density";
@@ -161,7 +161,7 @@ function TaskCardBase({ item, workspaceContext, lockedByName, onPress }: Props) 
               {due ? (
                 <View
                   className="rounded-sm px-2 py-0.5"
-                  style={{ backgroundColor: due.overdue ? "rgba(248,113,113,0.14)" : "rgba(255,255,255,0.05)" }}
+                  style={{ backgroundColor: due.overdue ? alpha(palette.danger, 0.14) : alpha(palette.textHi, 0.06) }}
                 >
                   <Text
                     className="text-meta"
@@ -222,7 +222,7 @@ function PriorityPip({ priority }: { priority: number }) {
   return (
     <View
       className="flex-row items-center gap-1 self-start rounded-pill border px-1.5 py-0.5"
-      style={{ borderColor: `${p.color}55`, backgroundColor: `${p.color}14` }}
+      style={{ borderColor: alpha(p.color, 0.33), backgroundColor: alpha(p.color, 0.08) }}
     >
       <FlagIcon size={10} color={p.color} strokeWidth={2.2} />
       <Text className="text-meta uppercase" style={{ color: p.color }}>

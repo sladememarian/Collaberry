@@ -9,7 +9,7 @@ import React, { useState } from "react";
 import { Modal, Pressable, Text, View } from "react-native";
 
 import { ChevronRightIcon } from "@/components/icons";
-import { glow, palette } from "@/theme/tokens";
+import { alpha, glow, palette } from "@/theme/tokens";
 
 const WEEKDAY_LABELS = ["S", "M", "T", "W", "T", "F", "S"];
 
@@ -125,7 +125,7 @@ export function DatePickerDialog({
                     testID={`date-picker-day-${toIso(cursor.y, cursor.m, day)}`}
                     className="flex-1 items-center justify-center rounded-md"
                     style={{
-                      backgroundColor: isSelected ? "rgba(168,85,247,0.25)" : "transparent",
+                      backgroundColor: isSelected ? alpha(palette.purple, 0.25) : "transparent",
                       borderWidth: isToday ? 1.5 : 0,
                       borderColor: palette.purpleSoft,
                     }}

@@ -17,6 +17,7 @@ import Animated, {
 } from "react-native-reanimated";
 
 import { useReducedMotion } from "@/hooks/useReducedMotion";
+import { palette } from "@/theme/tokens";
 
 export function Skeleton({
   width = "100%",
@@ -56,11 +57,11 @@ export function Skeleton({
 
   return (
     <View
-      style={[{ width, height, borderRadius: radius, backgroundColor: "#16161C", overflow: "hidden" }, style]}
+      style={[{ width, height, borderRadius: radius, backgroundColor: palette.surface, overflow: "hidden" }, style]}
     >
       <Animated.View
         style={[
-          { position: "absolute", top: 0, bottom: 0, width: "60%", backgroundColor: "#25252F" },
+          { position: "absolute", top: 0, bottom: 0, width: "60%", backgroundColor: palette.raised },
           sweep,
         ]}
       />

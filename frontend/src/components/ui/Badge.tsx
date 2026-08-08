@@ -5,7 +5,7 @@
 import React from "react";
 import { Text, View } from "react-native";
 
-import { contextAccent, glow, type WorkspaceContext } from "@/theme/tokens";
+import { alpha, contextAccent, glow, type WorkspaceContext } from "@/theme/tokens";
 
 export function ContextBadge({
   context,
@@ -18,7 +18,7 @@ export function ContextBadge({
   return (
     <View
       className="flex-row items-center gap-1.5 self-start rounded-pill border px-2 py-0.5"
-      style={{ borderColor: `${a.color}55`, backgroundColor: `${a.color}14` }}
+      style={{ borderColor: alpha(a.color, 0.33), backgroundColor: alpha(a.color, 0.08) }}
     >
       <View
         style={[{ width: 6, height: 6, borderRadius: 3, backgroundColor: a.color }, glow(a.glow, 6)]}

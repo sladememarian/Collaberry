@@ -50,6 +50,7 @@ import Svg, {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { useReducedMotion } from "@/hooks/useReducedMotion";
+import { useTheme } from "@/theme/ThemeContext";
 import { palette } from "@/theme/tokens";
 
 interface Props {
@@ -59,9 +60,12 @@ interface Props {
   /**
    * Backdrop behind the screen:
    * - "grid" (default): drifting dot-grid + cursor glow (Home, auth).
-   * - "aurora": slow drifting gradient bands (item detail).
-   * - "plain": solid void, no ambient motion — used on the tasks/kanban board
-   *   where the lanes are the focus and the ambient reads as noise behind them.
+   * - "aurora": slow drifting gradient bands. Only the /itemlab harness uses
+   *   this now — the real item screen moved to "plain" because the bands read as
+   *   noise behind a form.
+   * - "plain": the solid working-surface canvas (true black in dark), no ambient
+   *   motion — the tasks/kanban board and the item full view, where the content
+   *   is the focus and anything drifting behind it is a distraction.
    */
   variant?: "grid" | "aurora" | "plain";
 }
@@ -72,15 +76,21 @@ const GRID_DOT_RADIUS = 1.1;
 export function AppContainer({ children, edgeToEdge = false, variant = "grid" }: Props) {
   const insets = useSafeAreaInsets();
   const reduceMotion = useReducedMotion();
+  const { theme } = useTheme();
 
-  // The board wants a true black behind its lanes; every other screen sits on
-  // the void. Resolved per-render (not in StyleSheet.create) so a theme switch
-  // repaints it on native, where there are no CSS vars to fall back on.
+  // The board and the item full view want a true black behind their content;
+  // every other screen sits on the void. Resolved per-render (not in
+  // StyleSheet.create) so a theme switch repaints it on native, where there are
+  // no CSS vars to fall back on.
   const canvas = variant === "plain" ? "bg-board-canvas" : "bg-ink-void";
   const canvasColor = variant === "plain" ? palette.boardCanvas : palette.void;
 
   return (
-    <View className={`flex-1 ${canvas}`} style={{ backgroundColor: canvasColor, flex: 1 }}>
+    <View
+      className={`flex-1 ${canvas}`}
+      style={{ backgroundColor: canvasColor, flex: 1 }}
+      testID={`app-canvas-${variant}`}
+    >
       {/* Ambient backdrop — decorative, pointerEvents off so it never intercepts
           touch/scroll/drag, and clipped so it can't affect page layout. The
           "plain" variant renders nothing (solid canvas from the style above). */}
@@ -97,7 +107,18 @@ export function AppContainer({ children, edgeToEdge = false, variant = "grid" }:
         </View>
       ) : null}
 
+      {/* key={theme} remounts the whole screen subtree on a theme switch.
+          Tailwind classes follow the switch on their own (they compile to CSS
+          vars), but every color read through `palette` into a `style` prop is a
+          snapshot taken at render time — react-native-web strips `var()` out of
+          the style prop, so a live reference isn't an option there. Remounting
+          from the one component every screen already sits inside re-resolves all
+          of them at once, instead of asking ~37 call sites to each subscribe and
+          then silently missing the 38th. Navigation state lives above this in
+          app/_layout.tsx, so routing survives; only screen-local state resets,
+          and only on an explicit user action. */}
       <View
+        key={theme}
         className="flex-1"
         style={{
           paddingTop: edgeToEdge ? 0 : insets.top,
@@ -124,6 +145,13 @@ function useAppActive(): React.MutableRefObject<boolean> {
 /** A faint dot matrix that breathes with a slow, barely-perceptible drift. */
 function DotGrid({ reduceMotion }: { reduceMotion: boolean }) {
   const t = useSharedValue(0);
+  const { theme } = useTheme();
+
+  // The dot color is the brand soft-accent, which the light theme turns pink.
+  // 0.5 is tuned for dots glowing *out* of a black canvas; the same value on
+  // white paper is pink confetti, because a saturated hue reads far louder
+  // against a bright ground than against a dark one. Light gets a third of it.
+  const dotOpacity = theme === "light" ? 0.16 : 0.5;
 
   useEffect(() => {
     if (reduceMotion) {
@@ -159,7 +187,7 @@ function DotGrid({ reduceMotion }: { reduceMotion: boolean }) {
           right: -GRID_SPACING,
           bottom: -GRID_SPACING,
           left: -GRID_SPACING,
-          opacity: 0.5,
+          opacity: dotOpacity,
         },
       ]}
     >
@@ -233,10 +261,10 @@ function CursorGlow({ reduceMotion }: { reduceMotion: boolean }) {
 }
 
 const AURORA_BANDS = [
-  { top: "4%", height: 260, from: palette.blue, to: palette.cyan, duration: 15000, drift: 26 },
-  { top: "34%", height: 320, from: palette.cyan, to: palette.blueSoft, duration: 19000, drift: -32 },
-  { top: "62%", height: 280, from: palette.blueSoft, to: palette.blue, duration: 17000, drift: 22 },
-];
+  { top: "4%", height: 260, from: "blue", to: "cyan", duration: 15000, drift: 26 },
+  { top: "34%", height: 320, from: "cyan", to: "blueSoft", duration: 19000, drift: -32 },
+  { top: "62%", height: 280, from: "blueSoft", to: "blue", duration: 17000, drift: 22 },
+] as const;
 
 function AuroraWaves({ reduceMotion }: { reduceMotion: boolean }) {
   return (
@@ -282,7 +310,12 @@ function AuroraBand({
     transform: [{ translateY: t.value * band.drift }],
   }));
 
-  const gradId = `aurora-${band.from}-${band.to}`.replace(/[^a-zA-Z0-9]/g, "");
+  const gradId = `aurora-${band.from}-${band.to}`;
+  // Resolved here rather than in AURORA_BANDS: that array is module scope, so a
+  // `palette.blue` in it would be read once at import and then stay stale
+  // through every later theme switch.
+  const from = palette[band.from];
+  const to = palette[band.to];
 
   return (
     <Animated.View
@@ -301,9 +334,9 @@ function AuroraBand({
       <Svg width="100%" height="100%">
         <Defs>
           <LinearGradient id={gradId} x1="0%" y1="0%" x2="100%" y2="100%">
-            <Stop offset="0%" stopColor={band.from} stopOpacity={0.5} />
-            <Stop offset="55%" stopColor={band.to} stopOpacity={0.35} />
-            <Stop offset="100%" stopColor={band.from} stopOpacity={0} />
+            <Stop offset="0%" stopColor={from} stopOpacity={0.5} />
+            <Stop offset="55%" stopColor={to} stopOpacity={0.35} />
+            <Stop offset="100%" stopColor={from} stopOpacity={0} />
           </LinearGradient>
         </Defs>
         <Rect x={0} y={0} width="100%" height="100%" fill={`url(#${gradId})`} />

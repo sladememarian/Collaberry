@@ -2,6 +2,8 @@
 import React from "react";
 import { Text, View } from "react-native";
 
+import { palette } from "@/theme/tokens";
+
 import { Button } from "./Button";
 
 export function EmptyState({
@@ -39,7 +41,7 @@ export function EmptyState({
 
 /** Small live/offline pill for the board header. */
 export function ConnectionDot({ connected }: { connected: boolean }) {
-  const color = connected ? "#34D399" : "#7A7E8C";
+  const color = connected ? palette.success : palette.textLow;
   return (
     <View className="flex-row items-center gap-1.5">
       <View style={{ width: 7, height: 7, borderRadius: 4, backgroundColor: color }} />

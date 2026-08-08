@@ -34,80 +34,105 @@ function _resolve(key: keyof ThemeTokens): string {
   return (_currentNativeTheme === "light" ? LIGHT : DARK)[key];
 }
 
+/**
+ * A token as a concrete color string for the `style` prop, SVG fills, and shadows.
+ *
+ * Deliberately concrete rather than a live `rgb(var(--token))`: react-native-web
+ * runs every color in the `style` prop through its own normalizer, which does
+ * not understand `var()` and silently DROPS the declaration — a tinted lane
+ * track loses its background and border outright rather than following the
+ * theme. So a raw read is a snapshot, and the component holding it has to
+ * re-render for the theme switch to reach it. `AppContainer` remounts its
+ * children on the switch so that happens without every caller opting in.
+ */
+function _color(key: keyof ThemeTokens): string {
+  return toHex(_resolve(key));
+}
+
 export const palette = {
   get void() {
-    return toHex(_resolve("ink-void"));
+    return _color("ink-void");
   },
   get base() {
-    return toHex(_resolve("ink-base"));
+    return _color("ink-base");
   },
   get surface() {
-    return toHex(_resolve("ink-surface"));
+    return _color("ink-surface");
   },
   get raised() {
-    return toHex(_resolve("ink-raised"));
+    return _color("ink-raised");
   },
   get border() {
-    return toHex(_resolve("ink-border"));
+    return _color("ink-border");
   },
   get hair() {
-    return toHex(_resolve("ink-hair"));
+    return _color("ink-hair");
   },
 
   get textHi() {
-    return toHex(_resolve("text-hi"));
+    return _color("text-hi");
   },
   get textMid() {
-    return toHex(_resolve("text-mid"));
+    return _color("text-mid");
   },
   get textLow() {
-    return toHex(_resolve("text-low"));
+    return _color("text-low");
   },
   get textFaint() {
-    return toHex(_resolve("text-faint"));
+    return _color("text-faint");
   },
 
   get purple() {
-    return toHex(_resolve("brand-purple"));
+    return _color("brand-purple");
   },
   get purpleSoft() {
-    return toHex(_resolve("brand-purple-soft"));
+    return _color("brand-purple-soft");
   },
   get purpleDeep() {
-    return toHex(_resolve("brand-purple-deep"));
+    return _color("brand-purple-deep");
   },
   get blue() {
-    return toHex(_resolve("brand-blue"));
+    return _color("brand-blue");
   },
   get blueSoft() {
-    return toHex(_resolve("brand-blue-soft"));
+    return _color("brand-blue-soft");
   },
   get cyan() {
-    return toHex(_resolve("brand-cyan"));
+    return _color("brand-cyan");
+  },
+
+  get ctxWork() {
+    return _color("ctx-work");
+  },
+  get ctxUniversity() {
+    return _color("ctx-university");
+  },
+  get ctxPersonal() {
+    return _color("ctx-personal");
   },
 
   get success() {
-    return toHex(_resolve("state-success"));
+    return _color("state-success");
   },
   get warn() {
-    return toHex(_resolve("state-warn"));
+    return _color("state-warn");
   },
   get danger() {
-    return toHex(_resolve("state-danger"));
+    return _color("state-danger");
   },
 
   get raspberry() {
-    return toHex(_resolve("berry-raspberry"));
+    return _color("berry-raspberry");
   },
   get blueberry() {
-    return toHex(_resolve("berry-blueberry"));
+    return _color("berry-blueberry");
   },
   get blackberry() {
-    return toHex(_resolve("berry-blackberry"));
+    return _color("berry-blackberry");
   },
 
   get boardCanvas() {
-    return toHex(_resolve("board-canvas"));
+    return _color("board-canvas");
   },
 } as const;
 
@@ -143,18 +168,34 @@ export const contextAccent: Record<
   { color: string; glow: string; label: string }
 > = {
   get work() {
-    return { color: palette.purple, glow: "rgba(168,85,247,0.45)", label: "Work" };
+    return { color: palette.purple, glow: alpha(palette.purple, 0.45), label: "Work" };
   },
   get university() {
-    return { color: palette.blue, glow: "rgba(59,130,246,0.45)", label: "University" };
+    return { color: palette.blue, glow: alpha(palette.blue, 0.45), label: "University" };
   },
   get personal() {
-    return { color: "#8B8F9E", glow: "rgba(139,143,158,0.35)", label: "Personal" };
+    return { color: palette.ctxPersonal, glow: alpha(palette.ctxPersonal, 0.35), label: "Personal" };
   },
 };
 
-/** Bakes a fixed opacity into a hex color; passes rgba/rgb strings through. */
-function withOpacity(color: string, opacity: number): string {
+/**
+ * Bakes a fixed opacity into a color, handling both forms a token can take:
+ * the web's live `rgb(var(--x))` and native's resolved hex.
+ *
+ * Exported because a translucent tint is the one case a Tailwind class can't
+ * cover: `bg-brand-purple/10` works in JSX, but inline styles and SVG fills need
+ * a concrete string. Deriving it from `palette.*` rather than writing
+ * `rgba(168,85,247,0.1)` by hand is what keeps a tint following the theme — a
+ * literal stays purple when the light theme turns the brand pink, which is
+ * exactly the class of bug that leaves dark colors stranded on a white page.
+ */
+export function alpha(color: string, opacity: number): string {
+  // The web form of a token: `rgb(var(--brand-purple))`. Inject the alpha into
+  // the same functional notation so the value stays a live var reference and
+  // keeps following theme switches. Doing this by regex rather than string
+  // concatenation keeps an already-alpha'd var from gaining a second slash.
+  const varMatch = color.match(/^rgba?\(\s*(var\(--[a-z0-9-]+\))\s*(?:\/[^)]*)?\)$/i);
+  if (varMatch) return `rgb(${varMatch[1]} / ${opacity})`;
   if (color.startsWith("rgb")) return color;
   const hex = color.replace("#", "");
   const n = parseInt(hex.length === 3 ? hex.split("").map((c) => c + c).join("") : hex, 16);
@@ -177,7 +218,7 @@ function withOpacity(color: string, opacity: number): string {
 export const glow = (color: string = palette.purple, radiusPx = 24): ViewStyle => {
   if (Platform.OS === "web") {
     return {
-      boxShadow: `0px 0px ${radiusPx}px ${withOpacity(color, 0.55)}`,
+      boxShadow: `0px 0px ${radiusPx}px ${alpha(color, 0.55)}`,
     } as ViewStyle;
   }
   return {

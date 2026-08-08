@@ -29,7 +29,7 @@ import { Skeleton } from "@/components/ui/Skeleton";
 import { TextField } from "@/components/ui/TextField";
 import { MembersSheet } from "@/components/workspace/MembersSheet";
 import { useAuth } from "@/context/AuthContext";
-import { contextAccent, palette, type WorkspaceContext } from "@/theme/tokens";
+import { alpha, contextAccent, palette, type WorkspaceContext } from "@/theme/tokens";
 import type { Board, Workspace } from "@/types";
 
 const CONTEXTS: WorkspaceContext[] = ["personal", "university", "work"];
@@ -311,7 +311,7 @@ function BoardRow({
   return (
     <GlassCard onPress={onPress} className="flex-row items-center gap-3 p-4">
       <View
-        style={{ backgroundColor: `${accent.color}18`, borderColor: `${accent.color}55` }}
+        style={{ backgroundColor: alpha(accent.color, 0.09), borderColor: alpha(accent.color, 0.33) }}
         className="h-11 w-11 items-center justify-center rounded-md border"
       >
         <KanbanIcon size={20} color={accent.color} strokeWidth={1.9} />
@@ -376,7 +376,7 @@ function CreateWorkspaceSheet({
                   className="flex-1 items-center rounded-md border py-2.5"
                   style={{
                     borderColor: on ? a.color : palette.border,
-                    backgroundColor: on ? `${a.color}18` : "transparent",
+                    backgroundColor: on ? alpha(a.color, 0.09) : "transparent",
                   }}
                 >
                   <Text className="text-sub font-medium" style={{ color: on ? a.color : palette.textMid }}>
@@ -457,7 +457,7 @@ function CreateBoardSheet({
                   className="rounded-lg border p-3"
                   style={{
                     borderColor: on ? palette.purple : palette.border,
-                    backgroundColor: on ? "rgba(168,85,247,0.08)" : "transparent",
+                    backgroundColor: on ? alpha(palette.purple, 0.08) : "transparent",
                   }}
                 >
                   <Text className="text-body font-medium text-text-hi">{t.label}</Text>

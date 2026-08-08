@@ -12,7 +12,7 @@
 import React from "react";
 import { Modal, Pressable, Text, View } from "react-native";
 
-import { glow, palette } from "@/theme/tokens";
+import { alpha, glow, palette } from "@/theme/tokens";
 
 export function ConfirmDialog({
   open,
@@ -59,7 +59,7 @@ export function ConfirmDialog({
             <Pressable
               onPress={onConfirm}
               accessibilityRole="button"
-              style={{ backgroundColor: destructive ? "rgba(248,113,113,0.14)" : "rgba(168,85,247,0.14)", borderColor: `${accent}66` }}
+              style={{ backgroundColor: alpha(accent, 0.14), borderColor: alpha(accent, 0.4) }}
               className="rounded-md border px-4 py-2.5"
             >
               <Text className="text-body font-semibold" style={{ color: accent }}>

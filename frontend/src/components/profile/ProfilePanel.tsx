@@ -21,7 +21,7 @@ import { DraggableDialog } from "@/components/ui/DraggableDialog";
 import { TextField } from "@/components/ui/TextField";
 import { useAuth } from "@/context/AuthContext";
 import { useTheme } from "@/theme/ThemeContext";
-import type { ThemeName } from "@/theme/themes";
+import { THEMES, toHex, type ThemeName } from "@/theme/themes";
 import { palette } from "@/theme/tokens";
 
 export function ProfilePanel({ open, onClose }: { open: boolean; onClose: () => void }) {
@@ -203,9 +203,11 @@ function ThemeOption({
 }) {
   // The dark swatch is the app's void; the light one is paper. The rim uses the
   // theme's own accent (purple in dark, pink in light) so each chip previews the
-  // palette it switches to rather than the one currently active.
-  const swatch = name === "dark" ? "#0a0a0c" : "#ffffff";
-  const accent = name === "dark" ? "#a855f7" : "#db2777";
+  // palette it switches to rather than the one currently active. Read out of
+  // THEMES rather than written as literals — a hardcoded swatch would keep
+  // advertising the old palette after a theme is retuned.
+  const swatch = toHex(THEMES[name]["ink-void"]);
+  const accent = toHex(THEMES[name]["brand-purple"]);
 
   return (
     <Button

@@ -17,7 +17,7 @@ import { Avatar } from "@/components/ui/Avatar";
 import { Button } from "@/components/ui/Button";
 import { Sheet } from "@/components/ui/Sheet";
 import { TextField } from "@/components/ui/TextField";
-import { palette } from "@/theme/tokens";
+import { alpha, palette } from "@/theme/tokens";
 import type { MemberRole, UserPublic, Workspace } from "@/types";
 
 const ROLES: { role: MemberRole; label: string }[] = [
@@ -132,7 +132,7 @@ export function MembersSheet({
                       className="flex-1 items-center rounded-md border py-2.5"
                       style={{
                         borderColor: on ? palette.purple : palette.border,
-                        backgroundColor: on ? `${palette.purple}18` : "transparent",
+                        backgroundColor: on ? alpha(palette.purple, 0.09) : "transparent",
                       }}
                     >
                       <Text

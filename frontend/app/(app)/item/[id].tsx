@@ -50,7 +50,7 @@ import { DatePickerDialog } from "@/components/ui/DatePickerDialog";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { GlassCard } from "@/components/ui/GlassCard";
 import { useAuth } from "@/context/AuthContext";
-import { palette } from "@/theme/tokens";
+import { alpha, palette } from "@/theme/tokens";
 import { PRIORITIES } from "@/theme/priority";
 import type { ChecklistData, ChecklistEntry, Comment, DocumentData, Item, ItemType, Member } from "@/types";
 
@@ -194,7 +194,7 @@ export default function ItemScreen() {
 
   if (loading) {
     return (
-      <AppContainer variant="aurora">
+      <AppContainer variant="plain">
         <View className="flex-1 items-center justify-center">
           <ActivityIndicator color={palette.purple} />
         </View>
@@ -204,7 +204,7 @@ export default function ItemScreen() {
 
   if (error || !item) {
     return (
-      <AppContainer variant="aurora">
+      <AppContainer variant="plain">
         <Header onBack={goBack} save="idle" />
         <EmptyState title="Nothing to show" body={error ?? undefined} />
       </AppContainer>
@@ -212,7 +212,7 @@ export default function ItemScreen() {
   }
 
   return (
-    <AppContainer edgeToEdge variant="aurora">
+    <AppContainer edgeToEdge variant="plain">
       <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : undefined} className="flex-1">
         {/* Delete is destructive and irreversible — confirm first ("are you sure?"
             card). A cross-platform dialog because Alert.alert is a no-op on web. */}
@@ -415,7 +415,7 @@ function TypeSwitcher({
               className="flex-row items-center gap-1.5 rounded-md border px-3 py-2"
               style={{
                 borderColor: on ? palette.purple : palette.border,
-                backgroundColor: on ? "rgba(168,85,247,0.10)" : "transparent",
+                backgroundColor: on ? alpha(palette.purple, 0.1) : "transparent",
                 opacity: readOnly ? 0.5 : 1,
               }}
             >
@@ -480,7 +480,7 @@ function PriorityPicker({
               className="flex-row items-center gap-1.5 rounded-md border px-3 py-2"
               style={{
                 borderColor: on ? p.color : palette.border,
-                backgroundColor: on ? `${p.color}1f` : "transparent",
+                backgroundColor: on ? alpha(p.color, 0.12) : "transparent",
                 opacity: readOnly ? 0.5 : 1,
               }}
             >
@@ -529,7 +529,7 @@ function AssigneePicker({
                 className="flex-row items-center gap-3 rounded-md border px-3 py-2"
                 style={{
                   borderColor: on ? palette.purple : palette.border,
-                  backgroundColor: on ? "rgba(168,85,247,0.10)" : "transparent",
+                  backgroundColor: on ? alpha(palette.purple, 0.1) : "transparent",
                   opacity: readOnly ? 0.5 : 1,
                 }}
               >

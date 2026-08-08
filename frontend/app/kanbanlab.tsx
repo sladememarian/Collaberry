@@ -10,7 +10,7 @@
 import React, { useMemo, useState } from "react";
 import { Pressable, Text, View } from "react-native";
 
-import { palette } from "@/theme/tokens";
+import { alpha, palette } from "@/theme/tokens";
 
 import { AppContainer } from "@/components/AppContainer";
 import { DraggableBoard } from "@/components/kanban/DraggableBoard";
@@ -132,7 +132,7 @@ export default function KanbanLab() {
                   className="rounded-md border px-2.5 py-1"
                   style={{
                     borderColor: on ? palette.purple : palette.border,
-                    backgroundColor: on ? "rgba(168,85,247,0.10)" : "transparent",
+                    backgroundColor: on ? alpha(palette.purple, 0.1) : "transparent",
                   }}
                 >
                   <Text className="text-meta font-medium" style={{ color: on ? palette.purpleSoft : palette.textMid }}>

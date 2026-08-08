@@ -49,10 +49,11 @@ export interface ThemeTokens {
   "berry-blackberry": string;
 
   /**
-   * The kanban canvas. Deliberately its own token rather than reusing
-   * `ink-void`: the board wants a true black behind the lanes so the lane
-   * panels read as lifted surfaces, while the rest of the app keeps the
-   * slightly-blue void that stops large areas looking like a dead pixel field.
+   * The working-surface canvas, behind the kanban lanes and behind the item
+   * full view. Deliberately its own token rather than reusing `ink-void`: these
+   * screens want a true black so the panels on top read as lifted surfaces,
+   * while the rest of the app keeps the slightly-blue void that stops large
+   * areas looking like a dead pixel field.
    */
   "board-canvas": string;
 }
@@ -96,17 +97,25 @@ export const DARK: ThemeTokens = {
 export const LIGHT: ThemeTokens = {
   // The background stack inverts: void becomes the brightest paper, and each
   // "raised" step goes *down* in luminance so elevation still reads.
+  //
+  // These carry a deliberate cool cast rather than being neutral gray. A gray
+  // stack under pink and blue accents reads as a third, muddy hue; biasing the
+  // whole stack toward blue makes the neutrals part of the palette instead of a
+  // backdrop fighting it. Only `ink-void` stays pure white, as the reference
+  // point everything else is measured against.
   "ink-void": "255 255 255",
-  "ink-base": "250 250 252",
-  "ink-surface": "244 244 247",
-  "ink-raised": "237 237 242",
-  "ink-border": "214 214 224",
-  "ink-hair": "196 196 208",
+  "ink-base": "248 250 255",
+  "ink-surface": "241 245 254",
+  "ink-raised": "233 239 252",
+  "ink-border": "205 216 240",
+  "ink-hair": "184 198 230",
 
-  "text-hi": "17 17 22",
-  "text-mid": "68 70 82",
-  "text-low": "110 113 128",
-  "text-faint": "154 157 170",
+  // Cool-biased too, for the same reason: a true neutral black on tinted paper
+  // looks like ink from a different document.
+  "text-hi": "15 20 36",
+  "text-mid": "60 70 96",
+  "text-low": "104 116 145",
+  "text-faint": "150 162 190",
 
   // Purple becomes pink, per the brief. Deepened a touch from the dark values
   // so they still hold contrast against white rather than glowing off it.
@@ -120,7 +129,9 @@ export const LIGHT: ThemeTokens = {
 
   "ctx-work": "219 39 119",
   "ctx-university": "37 99 235",
-  "ctx-personal": "107 114 128",
+  // Cool slate rather than neutral gray, so the "personal" badge belongs to the
+  // same family as the other two instead of reading as disabled.
+  "ctx-personal": "100 116 152",
 
   "state-success": "5 150 105",
   "state-warn": "180 122 8",
@@ -130,8 +141,10 @@ export const LIGHT: ThemeTokens = {
   "berry-blueberry": "67 87 200",
   "berry-blackberry": "126 78 168",
 
-  // The light-theme board canvas is a soft paper, not glaring white.
-  "board-canvas": "248 248 251",
+  // The board and item canvas: a cool paper rather than glaring white, so the
+  // lanes and cards sitting on it still read as lifted surfaces the way the
+  // true black does in dark.
+  "board-canvas": "244 247 255",
 };
 
 export const THEMES: Record<ThemeName, ThemeTokens> = { dark: DARK, light: LIGHT };

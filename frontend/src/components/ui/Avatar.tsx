@@ -2,7 +2,7 @@
 import React from "react";
 import { Text, View } from "react-native";
 
-import { palette } from "@/theme/tokens";
+import { alpha, palette } from "@/theme/tokens";
 
 const TINTS = [palette.purple, palette.blue, palette.cyan, palette.purpleSoft, palette.blueSoft];
 
@@ -34,9 +34,9 @@ export function Avatar({
         width: size,
         height: size,
         borderRadius: size / 2,
-        backgroundColor: `${color}22`,
+        backgroundColor: alpha(color, 0.13),
         borderWidth: 1,
-        borderColor: `${color}66`,
+        borderColor: alpha(color, 0.4),
       }}
       className="items-center justify-center"
     >

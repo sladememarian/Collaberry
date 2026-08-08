@@ -11,7 +11,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import React, { createContext, useCallback, useContext, useEffect, useState } from "react";
 import { Pressable, Text, View } from "react-native";
 
-import { palette } from "@/theme/tokens";
+import { alpha, palette } from "@/theme/tokens";
 
 export type Density = "compact" | "comfortable" | "expanded";
 
@@ -96,7 +96,7 @@ export function DensityControl({
               className="rounded-md border px-2.5 py-1"
               style={{
                 borderColor: on ? palette.purple : palette.border,
-                backgroundColor: on ? "rgba(168,85,247,0.10)" : "transparent",
+                backgroundColor: on ? alpha(palette.purple, 0.1) : "transparent",
               }}
             >
               <Text

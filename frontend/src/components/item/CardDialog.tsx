@@ -25,7 +25,7 @@ import { ChecklistIcon, DocumentIcon, KanbanIcon } from "@/components/icons";
 import { Button } from "@/components/ui/Button";
 import { DraggableDialog } from "@/components/ui/DraggableDialog";
 import { PRIORITIES, priorityMeta } from "@/theme/priority";
-import { palette } from "@/theme/tokens";
+import { alpha, palette } from "@/theme/tokens";
 import type { CardData, Column, Item, ItemType } from "@/types";
 
 type SaveState = "idle" | "saving" | "saved";
@@ -235,7 +235,7 @@ export function CardDialog({
                     className="flex-1 flex-row items-center justify-center gap-1.5 rounded-md border py-2"
                     style={{
                       borderColor: on ? palette.purple : palette.border,
-                      backgroundColor: on ? "rgba(168,85,247,0.10)" : "transparent",
+                      backgroundColor: on ? alpha(palette.purple, 0.1) : "transparent",
                     }}
                   >
                     {o.icon(on ? palette.purpleSoft : palette.textMid)}
@@ -290,7 +290,7 @@ export function CardDialog({
                   className="flex-1 items-center rounded-md border py-2"
                   style={{
                     borderColor: on ? p.color : palette.border,
-                    backgroundColor: on ? `${p.color}1A` : "transparent",
+                    backgroundColor: on ? alpha(p.color, 0.1) : "transparent",
                   }}
                 >
                   <Text

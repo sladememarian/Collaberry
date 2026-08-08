@@ -24,7 +24,7 @@ import React, { useCallback, useMemo, useRef, useState } from "react";
 import { Platform, Pressable, ScrollView, Text, useWindowDimensions, View, type LayoutChangeEvent, type NativeSyntheticEvent, type NativeScrollEvent } from "react-native";
 
 import { DotGridIcon, PlusIcon, TrashIcon } from "@/components/icons";
-import { glow, palette, type WorkspaceContext } from "@/theme/tokens";
+import { alpha, glow, palette, type WorkspaceContext } from "@/theme/tokens";
 import type { Board, Column, Item } from "@/types";
 import {
   ADD_LANE_GAP,
@@ -285,7 +285,7 @@ function DraggableColumn({
   // Drop-target lanes glow and swell slightly — the "space opening up" cue.
   const targetStyle = useAnimatedStyle(() => ({
     transform: [{ scale: withSpring(isDropTarget ? 1.015 : 1, SPRING) }],
-    borderColor: withTiming(isDropTarget ? palette.purple : "rgba(35,35,45,0.7)", { duration: 160 }),
+    borderColor: withTiming(isDropTarget ? palette.purple : alpha(palette.border, 0.7), { duration: 160 }),
   }));
 
   // A dragged lane lifts off the row (scale + shadow + fade) the same way a
@@ -371,7 +371,7 @@ function DraggableColumn({
             // on the dotted ambient — on sparse boards the old 0.72 tint let the
             // background bleed through the empty space and read as "darkness".
             // The ambient still breathes through the gutters and page margins.
-            backgroundColor: "rgba(20,20,26,0.9)",
+            backgroundColor: alpha(palette.surface, 0.92),
           },
           targetStyle, // supplies the (animated) borderColor
           isDropTarget ? glow(palette.purple, 16) : null,
