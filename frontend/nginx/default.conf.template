@@ -1,0 +1,33 @@
+server {
+  listen 80;
+  root /usr/share/nginx/html;
+  index index.html;
+
+  # Hashed build assets never change content — cache hard.
+  location /_expo/static/ {
+    add_header Cache-Control "public, max-age=31536000, immutable";
+  }
+
+  # API + WebSocket: reverse-proxy to Envoy. Same-origin for the browser, so
+  # CORS never applies no matter where this is deployed. proxy_http_version
+  # 1.1 is required: Envoy answers HTTP/1.0 upstream requests with 426, and
+  # nginx's proxy_pass defaults to 1.0.
+  location /api/ {
+    proxy_pass ${BACKEND_SCHEME}://${BACKEND_HOST}:${BACKEND_PORT};
+    proxy_http_version 1.1;
+    proxy_set_header Host $host;
+    proxy_set_header X-Forwarded-For $remote_addr;
+  }
+  location /ws/ {
+    proxy_pass ${BACKEND_SCHEME}://${BACKEND_HOST}:${BACKEND_PORT};
+    proxy_http_version 1.1;
+    proxy_set_header Upgrade $http_upgrade;
+    proxy_set_header Connection "upgrade";
+    proxy_read_timeout 900s;
+    proxy_send_timeout 900s;
+  }
+
+  location /landing/ { try_files $uri $uri/ =404; }
+  # Expo Router paths (/login, /board/…) don't exist as files: SPA fallback.
+  location / { try_files $uri /index.html; }
+}

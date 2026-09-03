@@ -1,0 +1,12 @@
+node_modules
+dist
+.expo
+android
+ios
+test-results
+playwright-report
+*.png
+LandingPage/node_modules
+LandingPage/dist
+.env
+.env.*

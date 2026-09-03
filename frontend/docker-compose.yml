@@ -1,0 +1,28 @@
+name: collaberry-web
+
+services:
+  web:
+    build:
+      context: .
+      args:
+        # Leave empty: the web app is same-origin — nginx proxies /api and /ws
+        # to Envoy (BACKEND_* env vars at container start). Set these ONLY to
+        # point the bundle at a different gateway than its own origin.
+        EXPO_PUBLIC_API_URL: ""
+        EXPO_PUBLIC_WS_URL: ""
+    image: collaberry-web
+    ports:
+      - "8090:80"
+    environment:
+      # Envoy of the root stack (docker compose up at the repo root).
+      # Join its network so `collaberry-envoy-1` resolves.
+      BACKEND_HOST: collaberry-envoy-1
+      BACKEND_PORT: "8080"
+      BACKEND_SCHEME: http
+    networks: [default, collaberry-backend]
+    restart: unless-stopped
+
+networks:
+  collaberry-backend:
+    external: true
+    name: collaberry_nexus-net
