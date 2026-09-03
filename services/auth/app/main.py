@@ -24,7 +24,6 @@ from collaberry_common.models import (
 )
 from collaberry_common.security import (
     TokenClaims,
-    decode_access_token,  # noqa: F401  (kept for parity/testing imports)
     ensure_keypair,
     issue_access_token,
     load_private_key,
@@ -80,6 +79,15 @@ async def jwks(request: Request) -> dict:
     return public_jwks(request.app.state.jwt_public_key)
 
 
+def _user_public(user: dict) -> UserPublic:
+    return UserPublic(
+        id=user["id"],
+        email=user["email"],
+        display_name=user["display_name"],
+        created_at=user["created_at"],
+    )
+
+
 def _token_response(request: Request, user: dict) -> TokenResponse:
     settings = request.app.state.settings
     token = issue_access_token(
@@ -92,12 +100,7 @@ def _token_response(request: Request, user: dict) -> TokenResponse:
     return TokenResponse(
         access_token=token,
         expires_in=settings.access_token_ttl_seconds,
-        user=UserPublic(
-            id=user["id"],
-            email=user["email"],
-            display_name=user["display_name"],
-            created_at=user["created_at"],
-        ),
+        user=_user_public(user),
     )
 
 
@@ -128,12 +131,7 @@ async def me(request: Request, claims: TokenClaims = Depends(current_user)) -> U
     user = await repo(request).get_by_id(claims.user_id)
     if not user:
         raise HTTPException(status_code=404, detail="User no longer exists")
-    return UserPublic(
-        id=user["id"],
-        email=user["email"],
-        display_name=user["display_name"],
-        created_at=user["created_at"],
-    )
+    return _user_public(user)
 
 
 @app.patch("/api/v1/auth/me", response_model=TokenResponse, tags=["auth"])
@@ -184,12 +182,7 @@ async def users_by_ids(
     """
     wanted = [i for i in (ids.split(",") if ids else []) if i]
     users = await repo(request).get_by_ids(wanted)
-    return [
-        UserPublic(
-            id=u["id"], email=u["email"], display_name=u["display_name"], created_at=u["created_at"]
-        )
-        for u in users
-    ]
+    return [_user_public(u) for u in users]
 
 
 @app.get("/api/v1/auth/users/by-email", response_model=UserPublic, tags=["auth"])
@@ -207,9 +200,4 @@ async def user_by_email(
     user = await repo(request).get_by_email(email)
     if not user:
         raise HTTPException(status_code=404, detail="No one is registered with that email")
-    return UserPublic(
-        id=user["id"],
-        email=user["email"],
-        display_name=user["display_name"],
-        created_at=user["created_at"],
-    )
+    return _user_public(user)
