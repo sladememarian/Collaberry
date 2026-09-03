@@ -6,7 +6,7 @@
 #   * fan requests out to the right microservice by path prefix
 #   * verify RS256 access tokens against auth-service's JWKS (public routes skip it)
 #   * carry the decoded identity down to services as `x-user-*` headers
-#   * open CORS for the RN client and upgrade the WebSocket for live sync
+#   * open CORS for web clients and upgrade the WebSocket for live sync
 #   * shed load with a small per-connection local rate limit
 #
 # Auth endpoints, the JWKS document, and the WS handshake are deliberately left
@@ -51,19 +51,26 @@ static_resources:
                   virtual_hosts:
                     - name: collaberry
                       domains: ["*"]
-                      # CORS: answer preflight OPTIONS at the edge.
-                      # Note: the cors: field under virtual_hosts generates a deprecation warning
-                      # in Envoy v1.31+ but remains fully functional. The replacement
-                      # (typed_per_filter_config with CorsPolicy) requires runtime filter ordering
-                      # that conflicts with jwt_authn in this version. We keep the working form.
+                      # CORS: any origin. Deliberate, so the same file works on
+                      # every server — localhost dev, a VPS domain, or behind a
+                      # preview proxy — without editing YAML per deployment.
+                      # This is safe because CORS is browser *courtesy*, not the
+                      # access-control boundary: the app authenticates with a
+                      # bearer token in the Authorization header (never cookies),
+                      # and every protected route demands a valid JWT at the edge
+                      # AND again inside each service. A same-origin reverse
+                      # proxy (nginx/Caddy) in front makes this moot anyway.
+                      # ponytail: if you ever ship first-party cookies or need
+                      # origin lock-down, replace the regex with an explicit
+                      # allow_origin_string_match prefix list for your domain.
                       cors:
                         allow_origin_string_match:
                           - safe_regex:
                               regex: ".*"
-                        allow_methods: GET, POST, PATCH, PUT, DELETE, OPTIONS
-                        allow_headers: authorization, content-type, x-requested-with
-                        expose_headers: content-length, content-type
+                        allow_methods: "GET, POST, PUT, PATCH, DELETE, OPTIONS"
+                        allow_headers: "authorization,content-type"
                         max_age: "86400"
+
                       routes:
                         # ---- WebSocket: presence-service, no jwt_authn (token in query) ----
                         - match: { prefix: "/ws/" }
@@ -98,12 +105,13 @@ static_resources:
                           route: { cluster: notification-service }
 
                 http_filters:
-                  # 1) CORS must run early.
+                  # 0) CORS — must come before jwt_authn so preflight OPTIONS
+                  #    (which carries no token) is answered here, and so
+                  #    Access-Control-* headers are attached to every response.
                   - name: envoy.filters.http.cors
                     typed_config:
                       "@type": type.googleapis.com/envoy.extensions.filters.http.cors.v3.Cors
-
-                  # 2) Local rate limit: token bucket, refilled every second.
+                  # 1) Local rate limit: token bucket, refilled every second.
                   - name: envoy.filters.http.local_ratelimit
                     typed_config:
                       "@type": type.googleapis.com/envoy.extensions.filters.http.local_ratelimit.v3.LocalRateLimit
@@ -120,7 +128,7 @@ static_resources:
                         - append_action: OVERWRITE_IF_EXISTS_OR_ADD
                           header: { key: x-ratelimit, value: "edge" }
 
-                  # 3) JWT authentication. Validates RS256 tokens against the JWKS
+                  # 2) JWT authentication. Validates RS256 tokens against the JWKS
                   #    that auth-service publishes, then forwards claims downstream.
                   - name: envoy.filters.http.jwt_authn
                     typed_config:
@@ -149,7 +157,7 @@ static_resources:
                         - match: { prefix: "/api/" }
                           requires: { provider_name: collaberry_auth }
 
-                  # 4) Terminal router.
+                  # 3) Terminal router.
                   - name: envoy.filters.http.router
                     typed_config:
                       "@type": type.googleapis.com/envoy.extensions.filters.http.router.v3.Router
