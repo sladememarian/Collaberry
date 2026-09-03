@@ -47,7 +47,12 @@ function rewriteLoopbackForPlatform(url: string): string {
 const configuredHttp =
   process.env.EXPO_PUBLIC_API_URL ??
   extra.apiBaseUrl ??
-  hostFallbackHttp();
+  // On web, "no explicit server" means same-origin: the page is served next to
+  // a proxy that forwards /api and /ws to Envoy (the Docker image ships exactly
+  // that). Native has no page origin, so it keeps the platform fallback.
+  (Platform.OS === "web" && typeof window !== "undefined"
+    ? window.location.origin
+    : hostFallbackHttp());
 
 /** Build-time default — what the app uses until/unless an on-device override is saved. */
 export const DEFAULT_API_BASE = rewriteLoopbackForPlatform(configuredHttp).replace(/\/$/, "");
