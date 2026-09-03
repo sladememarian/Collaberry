@@ -37,6 +37,23 @@ interface AuthState {
 
 const AuthContext = createContext<AuthState | null>(null);
 
+/**
+ * A session is only a session if both halves arrived.
+ *
+ * `request<TokenResponse>` is a cast, not a check, so a 200 carrying anything
+ * else flows straight through to `persist(undefined, undefined)` — which clears
+ * storage, leaves the shell signed out, and sends the user back to the login
+ * screen with nothing to explain why. That is exactly how the Daytona preview
+ * interstitial (200 + HTML) presented itself: a dead Sign in button. The client
+ * now rejects non-JSON bodies; this catches the rest of the shape.
+ */
+function requireSession(res: { access_token?: string; user?: UserPublic }) {
+  if (!res?.access_token || !res?.user) {
+    throw new Error("The server didn't return a session. Check the server address and try again.");
+  }
+  return { token: res.access_token, user: res.user };
+}
+
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<UserPublic | null>(null);
   const [token, setToken] = useState<string | null>(null);
@@ -84,16 +101,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const signIn = useCallback(
     async (email: string, password: string) => {
-      const res = await authApi.login(email.trim(), password);
-      await persist(res.access_token, res.user);
+      const { token: t, user: u } = requireSession(await authApi.login(email.trim(), password));
+      await persist(t, u);
     },
     [persist],
   );
 
   const signUp = useCallback(
     async (email: string, password: string, displayName: string) => {
-      const res = await authApi.register(email.trim(), password, displayName.trim());
-      await persist(res.access_token, res.user);
+      const { token: t, user: u } = requireSession(
+        await authApi.register(email.trim(), password, displayName.trim()),
+      );
+      await persist(t, u);
     },
     [persist],
   );

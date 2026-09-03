@@ -128,6 +128,11 @@ export async function setServerOverride(api: string | null, ws?: string | null):
  * Cheap reachability probe for the Settings screen. Any HTTP answer — even a
  * 401/405 — proves the host is up and routable; only a network-level failure
  * (DNS, refused, timeout) counts as unreachable.
+ *
+ * "Answered" is not the same as "answered as the API", though: a proxy
+ * interstitial replies 200 with HTML and would otherwise be reported as a
+ * healthy server. We send the preview-proxy opt-out and then check that what
+ * came back is actually JSON, so the probe agrees with what `request()` will see.
  */
 export async function probeServer(
   url: string,
@@ -141,9 +146,19 @@ export async function probeServer(
       method: "GET",
       headers: {
         Accept: "application/json",
+        ...previewProxyHeaders(target),
       },
       signal: controller.signal,
     });
+    const kind = res.headers.get("content-type")?.split(";")[0]?.trim() ?? "";
+    if (!/json/i.test(kind)) {
+      return {
+        ok: false,
+        detail:
+          `Something answered (HTTP ${res.status}) but sent ${kind || "no content type"} ` +
+          `instead of JSON — that's a proxy or sign-in page, not the API.`,
+      };
+    }
     return { ok: true, detail: `Server answered (HTTP ${res.status}).` };
   } catch {
     return {
@@ -153,6 +168,38 @@ export async function probeServer(
   } finally {
     clearTimeout(timer);
   }
+}
+
+/**
+ * Daytona's sandbox preview proxy puts an anti-phishing interstitial in front of
+ * a preview host, and it decides who gets it by User-Agent — so the app's own
+ * `fetch` is served the warning page too, not just address-bar navigations.
+ *
+ * That page comes back as **200 with an HTML body**, which is indistinguishable
+ * from a successful call unless you read it: sign-in "succeeded" with an
+ * undefined token, the shell saw no session and bounced straight back to
+ * /login, and both the console and the network tab looked clean.
+ *
+ * The opt-out has to be a per-request header. The consent cookie the
+ * interstitial sets can never help here: the API lives on a different preview
+ * host than the app (`8080-…` vs `8081-…`), and a cross-origin `fetch` sends no
+ * cookies at all. The proxy echoes this header in its preflight
+ * `access-control-allow-headers`, so it costs no extra round trip.
+ *
+ * Scoped to the proxy's own hostname so other deployments don't carry a
+ * vendor-specific header they have no use for.
+ */
+const PREVIEW_PROXY_HOST = /(^|\.)proxy\.daytona\.work$/i;
+
+function previewProxyHeaders(base: string): Record<string, string> {
+  try {
+    if (PREVIEW_PROXY_HOST.test(new URL(base).hostname)) {
+      return { "X-Daytona-Skip-Preview-Warning": "true" };
+    }
+  } catch {
+    // Relative or malformed base — no proxy to opt out of.
+  }
+  return {};
 }
 
 let authToken: string | null = null;
@@ -187,6 +234,7 @@ export async function request<T>(path: string, opts: RequestOptions = {}): Promi
 
   const headers: Record<string, string> = {
     Accept: "application/json",
+    ...previewProxyHeaders(getApiBase()),
   };
   if (body !== undefined) headers["Content-Type"] = "application/json";
   if (auth && authToken) headers["Authorization"] = `Bearer ${authToken}`;
@@ -212,6 +260,21 @@ export async function request<T>(path: string, opts: RequestOptions = {}): Promi
     const detail = (payload as { detail?: unknown } | null)?.detail ?? payload;
     throw new ApiError(res.status, detail, humanError(res.status, detail));
   }
+
+  /**
+   * A 2xx whose body isn't JSON means something answered *instead of* the API —
+   * a proxy interstitial, an SSO wall, a captive portal, a static index.html
+   * from a misrouted path. `res.ok` is no defence: those all answer 200.
+   *
+   * Without this guard `safeJson` hands the raw HTML back as the payload, and a
+   * caller reading `access_token` off it just gets `undefined` — a failure with
+   * nothing to show the user and nothing red in the network tab. Fail loudly
+   * instead; every endpoint here returns an object or 204, so a bare string is
+   * always wrong.
+   */
+  if (typeof payload === "string") {
+    throw new ApiError(res.status, payload, nonJsonError(res));
+  }
   return payload as T;
 }
 
@@ -235,6 +298,16 @@ function humanError(status: number, detail: unknown): string {
     429: "Slow down a moment — too many requests.",
   };
   return map[status] ?? `Something went wrong (${status}).`;
+}
+
+function nonJsonError(res: Response): string {
+  const kind = res.headers.get("content-type")?.split(";")[0]?.trim() || "an unknown type";
+  return (
+    `The server answered ${res.status} with ${kind} instead of JSON. ` +
+    `Something in front of ${getApiBase()} is answering for it — a proxy warning ` +
+    `page or sign-in wall. Open that address directly in a tab and accept whatever ` +
+    `it shows, or point the app at the API's own host in Settings.`
+  );
 }
 
 function networkHint(_e: unknown): string {
