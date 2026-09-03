@@ -143,7 +143,7 @@ export default function ServerSettingsScreen() {
             autoCapitalize="none"
             autoCorrect={false}
             keyboardType="url"
-            placeholder="https://envoy.collaberry.boxd.sh"
+            placeholder="http://192.168.1.50:8080"
             testID="settings-api-input"
             hint="Where the backend gateway listens. Include the port if it isn't 80/443."
           />
@@ -157,7 +157,7 @@ export default function ServerSettingsScreen() {
             autoCapitalize="none"
             autoCorrect={false}
             keyboardType="url"
-            placeholder="wss://envoy.collaberry.boxd.sh"
+            placeholder="ws://192.168.1.50:8080"
             testID="settings-ws-input"
             hint="Follows the API address automatically — only change it if your WebSocket host differs."
           />

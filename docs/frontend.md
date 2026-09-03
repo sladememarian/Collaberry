@@ -99,6 +99,39 @@ and `BoardChange`.
 - **`.npmrc`** — `legacy-peer-deps=true` + official npm registry (the machine had
   a broken mirror configured globally).
 - **`tsconfig.json`** — strict, `@/*` path alias matching Babel.
+- **`public/serve.json`** — read by `serve` when the static export is hosted
+  (`npx expo export --platform web && npx serve dist`). It exists to keep the SPA
+  fallback off the `/landing/` prefix; see below.
+
+## Serving the web export
+
+`expo export --platform web` writes a single-page bundle, so every in-app route
+has to fall back to `/index.html`. The obvious `serve -s dist` does that, but it
+also breaks the landing page, and the reason is worth writing down because it
+looks like a missing file and isn't.
+
+serve-handler only stats the requested path up front when it has a file
+extension. Anything extensionless — `/login`, `/boards/x`, and `/landing/` alike
+— skips that stat and goes to the rewrite table, and once a rewrite matches, the
+rewritten path is the *only* candidate it will try. So `-s` (which is just
+`**` → `/index.html`) claims `/landing/` and answers with the Expo bundle, which
+has no such route and renders "Unmatched Route". Directory-index resolution
+never gets a turn.
+
+Giving `/landing/` a rewrite of its own doesn't help either: rewrites are applied
+cumulatively — the matched rule is dropped and the remaining ones run against the
+result — so `/landing/` → `/landing/index.html` is immediately re-rewritten by
+`**`. Nor can the document just be named `/landing/index.html`: that serves the
+right bytes, but the landing page is a TanStack Router app based at `/landing/`
+and its client router then has no route to match, so the page stays blank.
+
+What works is a fallback that never matches the prefix in the first place. Rule
+sources are globs (minimatch), so `!(landing)` can exclude it — no single glob
+covers both one-segment and nested paths, hence the three rules in
+`public/serve.json`. They all share one destination, which is what makes the
+cumulative re-application harmless. With no rewrite claiming it, `/landing/`
+falls through to `cleanUrls`, which finds `landing/index.html` and serves it
+under the pathname the router expects.
 
 ## Gotchas that cost time (so they're recorded)
 
