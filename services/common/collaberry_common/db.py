@@ -7,6 +7,8 @@ pools connections internally.
 
 from __future__ import annotations
 
+from bson import ObjectId
+from bson.errors import InvalidId
 from motor.motor_asyncio import AsyncIOMotorClient, AsyncIOMotorDatabase
 
 from .settings import Settings
@@ -47,3 +49,15 @@ def oid_to_str(document: dict | None) -> dict | None:
     if "_id" in doc:
         doc["id"] = str(doc.pop("_id"))
     return doc
+
+
+def parse_oid(value: str) -> ObjectId | None:
+    """Parse an id string into an ``ObjectId``, or None when malformed.
+
+    Every repository used to hand-roll this try/except; None (rather than raise)
+    is the shared contract because all call sites turn a bad id into a 404.
+    """
+    try:
+        return ObjectId(value)
+    except (InvalidId, TypeError):
+        return None

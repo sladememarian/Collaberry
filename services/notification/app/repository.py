@@ -9,12 +9,10 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from bson import ObjectId
-from bson.errors import InvalidId
 from pymongo import ReturnDocument
 from pymongo.errors import DuplicateKeyError
 
-from collaberry_common.db import Mongo, oid_to_str
+from collaberry_common.db import Mongo, oid_to_str, parse_oid
 from collaberry_common.models import utcnow
 
 
@@ -27,6 +25,9 @@ class NotificationRepository:
     async def ensure_indexes(self) -> None:
         await self._notes.create_index([("user_id", 1), ("created_at", -1)])
         await self._marks.create_index("key", unique=True)
+        # The deadline sweep runs every 60s over items.due_date — without this
+        # it's a full collection scan each tick.
+        await self._items.create_index("due_date")
 
     async def add(
         self, *, user_id: str, kind: str, title: str, body: str,
@@ -62,9 +63,8 @@ class NotificationRepository:
         return [oid_to_str(d) for d in await cur.to_list(length=200)]  # type: ignore[misc]
 
     async def mark_read(self, note_id: str, user_id: str) -> dict | None:
-        try:
-            oid = ObjectId(note_id)
-        except (InvalidId, TypeError):
+        oid = parse_oid(note_id)
+        if oid is None:
             return None
         doc = await self._notes.find_one_and_update(
             {"_id": oid, "user_id": user_id},

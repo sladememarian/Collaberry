@@ -14,11 +14,9 @@ The read is strictly read-only — the one-writer rule is untouched.
 
 from __future__ import annotations
 
-from bson import ObjectId
-from bson.errors import InvalidId
 from redis.asyncio import Redis
 
-from collaberry_common.db import Mongo
+from collaberry_common.db import Mongo, parse_oid
 
 # Long enough to absorb a burst of reconnects, short enough that revoking
 # someone's membership takes effect while they're still looking at the screen.
@@ -59,9 +57,8 @@ class BoardAccess:
         if cached is not None:
             return cached or None
 
-        try:
-            oid = ObjectId(item_id)
-        except (InvalidId, TypeError):
+        oid = parse_oid(item_id)
+        if oid is None:
             return None
 
         item = await self._items.find_one({"_id": oid}, {"board_id": 1})
@@ -72,18 +69,16 @@ class BoardAccess:
         return board_id
 
     async def _lookup(self, board_id: str, user_id: str) -> bool:
-        try:
-            oid = ObjectId(board_id)
-        except (InvalidId, TypeError):
+        oid = parse_oid(board_id)
+        if oid is None:
             return False
 
         board = await self._boards.find_one({"_id": oid}, {"workspace_id": 1})
         if not board:
             return False
 
-        try:
-            ws_oid = ObjectId(board["workspace_id"])
-        except (InvalidId, TypeError, KeyError):
+        ws_oid = parse_oid(board.get("workspace_id", ""))
+        if ws_oid is None:
             return False
 
         # Projection of _id only: we want existence, not the document.

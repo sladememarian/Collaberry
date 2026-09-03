@@ -10,9 +10,8 @@ from __future__ import annotations
 import uuid
 
 from bson import ObjectId
-from bson.errors import InvalidId
 
-from collaberry_common.db import Mongo, oid_to_str
+from collaberry_common.db import Mongo, oid_to_str, parse_oid
 from collaberry_common.models import (
     BoardCreate,
     Column,
@@ -33,10 +32,10 @@ class ConflictError(Exception):
 
 
 def _oid(value: str) -> ObjectId:
-    try:
-        return ObjectId(value)
-    except (InvalidId, TypeError):
+    oid = parse_oid(value)
+    if oid is None:
         raise NotFound(value)
+    return oid
 
 
 class WorkspaceRepository:

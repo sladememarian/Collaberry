@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from pymongo import ReturnDocument
 
-from collaberry_common.db import Mongo, oid_to_str
+from collaberry_common.db import Mongo, oid_to_str, parse_oid
 from collaberry_common.models import utcnow
 from collaberry_common.security import hash_password
 
@@ -26,11 +26,8 @@ class UserRepository:
         return oid_to_str(await self._users.find_one({"email": email.lower()}))
 
     async def get_by_id(self, user_id: str) -> dict | None:
-        from bson import ObjectId
-
-        try:
-            oid = ObjectId(user_id)
-        except Exception:
+        oid = parse_oid(user_id)
+        if oid is None:
             return None
         return oid_to_str(await self._users.find_one({"_id": oid}))
 
@@ -41,14 +38,7 @@ class UserRepository:
         raising — the caller passes ids it already trusts came from membership
         records, and a stray bad one shouldn't fail the whole lookup.
         """
-        from bson import ObjectId
-
-        oids = []
-        for uid in user_ids:
-            try:
-                oids.append(ObjectId(uid))
-            except Exception:
-                continue
+        oids = [oid for uid in user_ids if (oid := parse_oid(uid)) is not None]
         if not oids:
             return []
         docs = await self._users.find({"_id": {"$in": oids}}).to_list(length=None)
@@ -73,11 +63,8 @@ class UserRepository:
         Hashing happens here rather than in the route so the plaintext password
         never travels further into the app than it has to.
         """
-        from bson import ObjectId
-
-        try:
-            oid = ObjectId(user_id)
-        except Exception:
+        oid = parse_oid(user_id)
+        if oid is None:
             return None
 
         changes: dict = {}
