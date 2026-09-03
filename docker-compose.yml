@@ -71,7 +71,8 @@ services:
     <<: *service-base
     build:
       context: ./services
-      dockerfile: auth/Dockerfile
+      dockerfile: Dockerfile
+      args: { SERVICE: auth }
     volumes:
       - keys:/keys
     depends_on:
@@ -86,7 +87,8 @@ services:
     <<: *service-base
     build:
       context: ./services
-      dockerfile: workspace/Dockerfile
+      dockerfile: Dockerfile
+      args: { SERVICE: workspace }
     volumes:
       - keys:/keys:ro
     depends_on:
@@ -104,7 +106,8 @@ services:
     <<: *service-base
     build:
       context: ./services
-      dockerfile: presence/Dockerfile
+      dockerfile: Dockerfile
+      args: { SERVICE: presence }
     volumes:
       - keys:/keys:ro
     depends_on:
@@ -120,7 +123,8 @@ services:
     <<: *service-base
     build:
       context: ./services
-      dockerfile: notification/Dockerfile
+      dockerfile: Dockerfile
+      args: { SERVICE: notification }
     volumes:
       - keys:/keys:ro
     depends_on:
