@@ -60,15 +60,21 @@ class PresenceStore:
 
     async def list_presence(self, board_id: str) -> list[dict]:
         conn_ids = await self.redis.smembers(self._pindex(board_id))
+        if not conn_ids:
+            return []
+        # One round trip for all keys instead of one GET per connection.
+        raws = await self.redis.mget([self._pkey(board_id, c) for c in conn_ids])
+        dead: list[str] = []
         users: dict[str, dict] = {}
-        for conn_id in conn_ids:
-            raw = await self.redis.get(self._pkey(board_id, conn_id))
+        for conn_id, raw in zip(conn_ids, raws):
             if raw is None:
                 # Expired connection — clean the index lazily.
-                await self.redis.srem(self._pindex(board_id), conn_id)
+                dead.append(conn_id)
                 continue
             user = orjson.loads(raw)
             users[user["user_id"]] = user  # dedupe multi-tab by user
+        if dead:
+            await self.redis.srem(self._pindex(board_id), *dead)
         return list(users.values())
 
     # ---- typing ----------------------------------------------------------
