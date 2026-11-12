@@ -10,33 +10,61 @@ React Native codebase that runs on iOS, Android, and the web / Windows.
 
 ## Architecture
 
+Collaberry is a set of small backend services behind a single gateway, with one
+React Native codebase as the client (iOS, Android, web / Windows).
+
 ```
-                       ┌─────────────────────────────┐
-   React Native app ──▶│  Envoy  (:8080, only public) │
-   (iOS/Android/web)   │  routing · CORS · JWT · RL   │
-                       └───┬───────┬───────┬───────┬──┘
-                           │       │       │       │
-              /auth   auth-service │  presence-service   notification-service
-           /workspace  workspace-service  (WS + Redis)   (event worker)
-                           │       │       │       │
-                        ┌──▼───────▼──┐ ┌──▼───────▼──┐
-                        │   MongoDB   │ │    Redis    │
-                        │ (persistent)│ │ (presence,  │
-                        │             │ │  locks, bus)│
-                        └─────────────┘ └─────────────┘
+        React Native app  (iOS · Android · Web)
+                         │
+                         │  HTTP + WebSocket
+                         ▼
+   ┌──────────────────────────────────────────────┐
+   │  Envoy gateway  :8080   (only public port)   │
+   │  routing · CORS · JWT verification · rate    │
+   │  limiting                                    │
+   └───────┬──────────────────┬─────────────┬─────┘
+           │ /auth            │ /workspace  │ WebSocket
+           ▼                  ▼             ▼
+   ┌──────────────┐  ┌──────────────────┐  ┌──────────────────┐
+   │ auth-service │  │ workspace-service│  │ presence-service │
+   └──────┬───────┘  └────────┬─────────┘  └────────┬─────────┘
+          │                   │                     │
+          │                   │ publishes           │ subscribes
+          │                   │ BoardEvents         │ + presence, locks
+          ▼                   ▼                     ▼
+   ┌─────────────────────────────┐    ┌──────────────────────────┐
+   │ MongoDB (persistent data)   │    │ Redis (event bus,        │
+   │                             │    │ presence, edit locks)    │
+   └─────────────────────────────┘    └─────────────┬────────────┘
+                                                    │ subscribes
+                                                    ▼
+                                      ┌──────────────────────────┐
+                                      │ notification-service     │
+                                      │ (background worker)      │
+                                      └──────────────────────────┘
 ```
 
-Only Envoy is published to the host; every service, Mongo, and Redis live on an
-internal bridge network. Envoy verifies RS256 tokens against the JWKS that
-`auth-service` publishes and forwards identity downstream.
+Only Envoy is published to the host. Every service, MongoDB, and Redis run on an
+internal Docker bridge network and cannot be reached directly.
 
-- **auth-service** — register / login, RS256 tokens, JWKS.
-- **workspace-service** — the single writer of board state (workspaces, boards,
-  polymorphic items in MongoDB). Every mutation fans a `BoardEvent` out on Redis.
-- **presence-service** — WebSocket hub: who's on a board, typing indicators, and
-  30-second card edit locks. Relays board events to connected clients.
-- **notification-service** — event-driven worker (deadlines, @mentions).
-- **frontend** — Expo + expo-router + NativeWind (see `frontend/README.md`).
+### Components
+
+| Component | Role |
+|-----------|------|
+| **Envoy** | Single entry point. Routes requests, handles CORS and rate limiting, and verifies RS256 JWTs against the JWKS published by `auth-service`, then forwards the user identity downstream. |
+| **auth-service** | Register / login, issues RS256 tokens, publishes the JWKS. |
+| **workspace-service** | The single writer of board state: workspaces, boards, and polymorphic items (task cards, rich-text documents, checklists) stored in MongoDB. Every change is broadcast as a `BoardEvent` on Redis. |
+| **presence-service** | WebSocket hub. Tracks who is on a board, shows typing indicators, manages 30-second card edit locks, and relays board events to connected clients. |
+| **notification-service** | Background worker that reacts to events (deadlines, @mentions). It has no public route. |
+| **frontend** | Expo + expo-router + NativeWind (see `frontend/README.md`). |
+
+### How a change reaches other users
+
+1. The client sends a request (e.g. edit a card) to Envoy, which checks the JWT.
+2. Envoy routes it to `workspace-service`, which saves the change to MongoDB.
+3. `workspace-service` publishes a `BoardEvent` to Redis.
+4. `presence-service` receives the event and pushes it over WebSocket to everyone on that board.
+5. `notification-service` receives the same event and handles any deadlines or @mentions.
 
 ## Quick start
 
